@@ -1,0 +1,4409 @@
+<!DOCTYPE html>
+<!--
+Copyright (©) 2014-2015 Angelo Borsotti. All Rights Reserved.
+-->
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>Regular Expressions Berry-Sethi dfa</title>
+<style type=text/css>
+body {
+    font-size: 11pt;
+    font-family: "Verdana";
+    font-weight: normal;
+    font-style: normal;
+    color: black;
+    background-color: white;
+    margin-left: 2em;
+    margin-right: 2em;
+}
+.rho {
+    border-collapse: collapse;
+    border: 1px solid LightGray;
+    font-size:9pt;
+}
+.rho TD {
+    border: 1px solid LightGray;
+}
+
+.trcButton {
+    background-color: WhiteSmoke;
+    border-radius: 3px;
+    box-shadow: 2px 2px 2px gray;
+    font-size:9pt;
+}
+.trcButtonOn {
+    background-color: Gainsboro;
+    border-radius: 3px;
+    box-shadow: 2px 2px 2px gray inset;
+    font-size:9pt;
+}
+.trcButton:hover, .trcButtonOn:hover {
+    background-color: Lavender;
+}
+
+.llabel {
+    font-size: 9pt;
+}
+.llabel1 {
+    text-indent: -2em;
+}
+.llabel2 {
+    text-indent: -1em;
+}
+.longlabel {
+    border:1px solid black;
+    background-color: LemonChiffon;
+    padding: 5px;
+    display: none;
+    position: absolute;
+}
+
+@keyframes blink {
+    0% {box-shadow: 0 0 5px green;}
+    20% {box-shadow: 0 0 10px green;}
+    40% {box-shadow: 0 0 15px green;}
+    60% {box-shadow: 0 0 10px green;}
+    80% {box-shadow: 0 0 5px green;}
+    100% {box-shadow: none;}
+}
+@-webkit-keyframes blink {
+    0% {box-shadow: 0 0 5px green;}
+    20% {box-shadow: 0 0 10px green;}
+    40% {box-shadow: 0 0 15px green;}
+    60% {box-shadow: 0 0 10px green;}
+    80% {box-shadow: 0 0 5px green;}
+    100% {box-shadow: none;}
+}
+@keyframes blinksvg {
+    0% {stroke-width:1px; stroke:black;}
+    10% {stroke-width:2px; stroke:#323232;}
+    20% {stroke-width:3px; stroke:#646464;}
+    30% {stroke-width:4px; stroke:#969696;}
+    40% {stroke-width:5px; stroke:#c8c8c8;}
+    50% {stroke-width:6px; stroke:#e1e1e1;}
+    60% {stroke-width:5px; stroke:#c8c8c8;}
+    70% {stroke-width:4px; stroke:#969696;}
+    80% {stroke-width:3px; stroke:#646464;}
+    90% {stroke-width:2px; stroke:#323232;}
+    100% {stroke-width:1px; stroke:black;}
+}
+@-webkit-keyframes blinksvg {
+    0% {stroke-width:1px; stroke:black;}
+    10% {stroke-width:2px; stroke:#323232;}
+    20% {stroke-width:3px; stroke:#646464;}
+    30% {stroke-width:4px; stroke:#969696;}
+    40% {stroke-width:5px; stroke:#c8c8c8;}
+    50% {stroke-width:6px; stroke:#e1e1e1;}
+    60% {stroke-width:5px; stroke:#c8c8c8;}
+    70% {stroke-width:4px; stroke:#969696;}
+    80% {stroke-width:3px; stroke:#646464;}
+    90% {stroke-width:2px; stroke:#323232;}
+    100% {stroke-width:1px; stroke:black;}
+}
+
+.lefthandle {
+    cursor:w-resize;
+    position:absolute;
+    width:5px;
+}
+.bottomhandle {
+    cursor:s-resize;
+    position:absolute;
+    height:5px;
+}
+.overlay {
+    border:1px dashed grey;
+    position:absolute;
+}
+
+</style>
+<script>
+// ---------- Tracing -----------------
+
+var trc = {};           // trace flags
+
+// trace the specified arguments. If there are several, trace them separated by spaces.
+function twriteln(args){
+    var str = "";
+    for (var i = 0; i < arguments.length; i++){
+        if (str.length > 0) str += " ";
+        str += arguments[i];
+    }
+    console.log(str);
+}
+
+// trace the specified arguments if the trace flag specified by the first is set.
+// If there are more than two arguments, trace them separated by spaces.
+function trace(f,str){
+    if (!(f in trc)) return;
+    var arr = [];
+    for (var i = 1; i < arguments.length; i++){
+        arr[arr.length] = arguments[i];
+    }
+    twriteln.apply(null,arr);
+}
+
+// set the specified trace flags
+function settrc(s){
+    trc = {};
+    if (!s) return;
+    for (var i = 0; i < s.length; i++){
+        trc[s.charAt(i)] = true;
+    }
+}
+
+// callback to set the flags. N.B. the field is kept so as to make the browser load it
+// with the previous value when the page is reloaded (otherwise there is a need to set
+// each time the flags manually on the gui)
+function tracecallback(){
+    var f = document.getElementById("trcflag");
+    settrc(f.value);
+}
+
+// callback to keep pressed the trace buttons
+function clicktrc(ele){
+    var f = ele.getAttribute("data-f");
+    if (ele.className == "trcButton"){
+        ele.className = "trcButtonOn";
+        trc[f] = true;
+    } else {
+        ele.className = "trcButton";
+        delete trc[f];
+    }
+    var str = "";
+    for (i in trc){
+        str += i;
+    }
+    document.getElementById("trcflag").value = str;
+}
+
+// set the trace flags taking them from the trace buttons
+function setTrace(){
+    if (!debug) return;
+    tracecallback();              // set the trace flags from the trace field
+    var form = document.getElementById("tracefls");
+    var str = "";
+    var children = form.childNodes;
+    for (var i = 0; i < children.length; i++){
+        if (children[i].className == "trcButton"){
+            var f = children[i].getAttribute("data-f");
+            if (f in trc){
+                children[i].className = "trcButtonOn";
+                str += f;
+            }
+        } else if (children[i].className == "trcButtonOn"){
+            var f = children[i].getAttribute("data-f");
+            trc[f] = true;
+            str += f;
+        }
+    }
+    document.getElementById("trcflag").value = str;
+}
+
+// trace the specified object (own: true to trace only the specific properties)
+function traceObject(obj,own){
+    if (typeof(obj) != "object") return;
+    if (obj == null) twriteln("null");
+    if (obj.length == 0) twriteln("[]");
+    for (var i in obj){
+        if (own && !obj.hasOwnProperty(i)) continue;
+        twriteln(i + ":",obj[i]);
+    }
+}
+
+// deliver a string representing the specified object (own: true to trace only the specific properties)
+function objToString(obj,own){
+    if (typeof(obj) != "object") return obj;
+    if (obj == null) return "null";
+    if (obj.length == 0) return "[]";
+    if (arguments.length == 1) own = true;
+    var res = "";
+    for (var i in obj){
+        if (own && !obj.hasOwnProperty(i)) continue;
+        if (res.length > 0) res += " ";
+        res += i + ": " + obj[i];
+    }
+    return res;
+}
+
+</script>
+<script>
+// ---------- Collection classes -----------------
+
+// In javascript 1.8 Sets of objects are useless, and so are maps, unless one has a means
+// to make objects unique: they do not take into account the equals() method to tell the
+// objects or keys that are equal.
+// This is a rather inefficient implementation, good for experimenting.
+
+// sets
+function SetClass(){
+    this.arr = [];       // very bare implementation using an array
+
+    // remove all the elements
+    this.clear = function(){
+        this.arr = [];
+    }
+
+    // add the specified element (if not present), and return true if it was not present
+    this.add = function(ele){
+        for (var i = 0; i < this.arr.length; i++){
+            if (typeof(this.arr[i]) == typeof(ele)){
+                if (typeof(this.arr[i]) == "object"){
+                    if (this.arr[i].equals(ele)) return false;
+                } else {
+                    if (this.arr[i] == ele) return false;
+                }
+            }
+        }
+        this.arr[this.arr.length] = ele;
+        return true;
+    }
+
+    // add all the elements of the specified set
+    this.addAll = function(set){
+        l: for (var i = 0; i < set.arr.length; i++){
+            for (var j = 0; j < this.arr.length; j++){
+                if (set.arr[i].equals(this.arr[j])) continue l;
+            }
+            this.arr[this.arr.length] = set.arr[i];
+        }
+    }
+
+    // deliver an array containing all the elements
+    this.toArray = function(){
+        var arr = [];
+        for (var i = 0; i < this.arr.length; i++){
+            arr[arr.length] = this.arr[i];
+        }
+        return arr;
+    }
+
+    // tell if this set contains the same elements as the specificed one
+    this.equals = function(other){
+        return arraysIdentical(this.arr,other.arr);
+    }
+
+    // deliver the number of elements
+    this.size = function(other){
+        return this.arr.length;
+    }
+
+    // deliver a string representing this set
+    this.toString = function(){
+        var str = "{";
+        for (var i = 0; i < this.arr.length; i++){
+            if (i == 0) str += " ";
+            str += this.arr[i];
+        }
+        str += "}";
+        return str;
+    }
+
+    // remove the element at the specified index
+    this.remove = function(idx){
+        this.arr.splice(idx,1);
+    }
+
+    // tell if this set contains the specified element
+    this.contains = function(ele){
+        for (var i = 0; i < this.arr.length; i++){
+            if (this.arr[i].equals(ele)) return true;
+        }
+        return false;
+    }
+
+    // return an iterator
+    this.iterator = function(){
+        var set = this;
+        return {
+            "current": 0,
+            "set": set,
+            "hasNext": function(){
+                return this.current < set.arr.length;
+            },
+            "next": function(){
+                return set.arr[this.current++];
+            }
+        }
+    }
+}
+
+// maps
+function MapClass(){
+    this.arr = [];       // very bare implementation using an arr
+
+    // remove all the entries
+    this.clear = function(){
+        this.arr = [];
+    }
+
+    // deliver the index of the entry of the specified key
+    this.getEntryIndex = function(key){
+        var found = -1;
+        for (var i = 0; i < this.arr.length; i++){
+            var entry = this.arr[i];
+            var mkey = entry[0];
+            if (typeof(mkey) == typeof(key)){
+                if (typeof(mkey) == "object"){
+                    if (mkey.equals(key)){
+                        found = i;
+                        break;
+                    }
+                } else {
+                    if (mkey == key){
+                        found = i;
+                        break;
+                    }
+                }
+            }
+        }
+        return found;
+    }
+
+    // deliver the value associated to the specified key
+    this.get = function(key){
+        var res = null;
+        var found = this.getEntryIndex(key);
+        if (found >= 0){
+            res = this.arr[found][1];
+        }
+        return res;
+    }
+
+    // deliver the entry at the specified index
+    this.getEntry = function(i){
+        return this.arr[i];
+    }
+
+    // add the specified entry
+    this.set = function(key,val){
+        var res = null;
+        var found = this.getEntryIndex(key);
+        if (found >= 0){
+            res = this.arr[found][1];
+            this.arr[found][1] = val;
+        } else {
+            this.arr[this.arr.length] = [key,val];
+        }
+        return res;
+    }
+
+    // deliver the number of entries
+    this.size = function(other){
+        return this.arr.length;
+    }
+
+    // deliver a string representin this map
+    this.toString = function(){
+        var str = "{";
+        for (var i = 0; i < this.arr; i++){
+            if (i == 0) str += " ";
+            str += this.arr[i][0] + "=" + this.arr[i][1];
+        }
+        str += "}";
+        return str;
+    }
+}
+
+// string buffers
+function StringBuilder(){
+    this.str = "";
+
+    // append the specified string
+    this.append = function(str){
+        this.str += str;
+    }
+
+    // deliver a string representing the contents of this buffer
+    this.toString = function(){
+        return this.str;
+    }
+}
+
+// arrays
+
+// tell if the two arrays contain identical elements
+function arraysIdentical(a,b){
+    if ((a == null) != (b == null)) return false;
+    if (a == null) return true;
+    var i = a.length;
+    if (i != b.length) return false;
+    while (i--){
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
+};
+
+// deliver a string representing the specified array using the toString() for each element
+function arrToStr(arr){
+    var str = "[" + arr.length + ":";
+    for (var i = 0; i < arr.length; i++){
+        str += arr[i];
+    }
+    return str + "]";
+}
+
+// assign a value to a matrix cell, creating the row if it does not exist
+function mSet(matr,i,j,val){
+    if (matr[i] == null) matr[i] = [];
+    matr[i][j] = val;
+}
+
+// lists
+function LinkedList(){
+    this.head = null;                // the head of the list
+    this.tail = null;                // the tail of the list
+
+    // add the specified value to the end of this list
+    this.add = function(val){
+        var ele = new ListElemClass();
+        ele.val = val;
+        if (this.head == null){            // list empty
+            this.head = ele;
+        } else {
+            this.tail.next = ele;
+        }
+        ele.prev = this.tail;
+        this.tail = ele;
+    }
+
+    // remove the last value from this list and deliver it
+    this.pollLast = function(){
+        var res = this.tail;
+        this.tail = res.prev;
+        res.prev = null;
+        if (this.tail == null){
+            this.head = null;
+        } else {
+            this.tail.next = null;
+        }
+        return res.val;
+    }
+
+    // deliver a string representing this element
+    this.toString = function(){
+        var str = "";
+        for (var i = this.head; i != null; i = i.next){
+            if (i != this.head) str += ", ";
+            str += i.val;
+        }
+        return str;
+    }
+
+    // prepend the specified element to this list
+    this.prepend = function(val){
+        var ele = new ListElemClass();
+        ele.val = val;
+        if (this.head == null){               // list empty
+            this.tail = ele;
+        }
+        ele.next = this.head;
+        this.head = ele;
+    }
+
+    // get the first element
+    this.getFirst = function(){
+        if (this.head != null) return this.head.val;
+        return null;
+    }
+
+    // return an iterator
+    this.iterator = function(){
+        return {
+            "current": this.head,
+            "hasNext": function(){
+                return this.current != null;
+            },
+            "next": function(){
+                var res = this.current.val;
+                this.current = this.current.next;
+                return res;
+            }
+        }
+    }
+}
+
+// an element in a list
+function ListElemClass(){
+    this.next = null;
+    this.prev = null;
+    this.val = null;
+
+    // deliver a string representing this element
+    this.toString = function(){
+        return this.val.toString();
+    }
+}
+
+// graphs
+
+// a graph
+function Graph(){
+    this.trc = {};      // trace flags
+
+    // set the specified trace flags
+    this.settrc = function(s){
+        trc = {};
+        if (!s) return;
+        for (var i = 0; i < s.length; i++){
+            trc[s.charAt(i)] = true;
+        }
+    }
+
+    this.name = "";                   // name of the graph
+    this.nodes = new LinkedList();    // list of nodes
+    this.numOfNodes = 0;              // number of nodes
+    this.edges = new LinkedList();    // list of edges
+    this.numOfEdges = 0;              // number of edges
+    this.kind = 0;                    // kind of graph (directed, mixed, ordered, ...)
+    this.extras = null;               // extra data
+
+    // clone this object
+    this.clone = function(){
+        var t = new Graph();
+        for (var i in this){
+            t[i] = this[i];
+        }
+
+        var nodes = [];                     // create nodes
+        t.nodes = new LinkedList();
+        for (var i = this.nodes.iterator(); i.hasNext();){
+            var v = i.next();
+            v = v.clone();
+            nodes[v.index] = v;
+            t.nodes.add(v);
+        }
+        var edges = [];                     // create edges
+        t.edges = new LinkedList();
+        for (var i = this.edges.iterator(); i.hasNext();){
+            var e = i.next();
+            e = e.clone();
+            t.edges.add(e);
+            e.from = nodes[e.from.index];           // remap to new nodes
+            e.to = nodes[e.to.index];
+            edges[e.index] = e;
+        }
+        for (var i = 0; i < nodes.length; i++){     // create edges lists
+            var v = nodes[i];
+            var list = new LinkedList();
+            for (var ed in v.edgelist){
+                if (ed != null){
+                    ed = edges[ed.index];
+                }
+                list.add(el);
+            }
+            v.edgelist = list;
+        }
+        return t;
+    }
+
+    // deliver a reference to the node with the given name, creating
+    // one if it does not exist
+    this.newNode = function(name){
+        for (var i = this.nodes.iterator(); i.hasNext();){
+            var v = i.next();
+            if (v.name == name){
+                return i;                   // found
+            }
+        }
+
+        var n = new Node();                 // not found, create one
+        n.name = name;
+        this.nodes.add(n);                  // append to list
+        n.index = this.numOfNodes++;        // update nodes count
+        return n;
+    }
+
+    // deliver a reference to the edge with the given characteristics,
+    // creating one (and possibly its nodes)
+    this.newEdge = function(from,to,name,directed){
+        var e = new Edge();           // create new edge
+        e.name = name;
+        e.from = from;                // source node
+        e.to = to;                    // target node
+        e.directed = directed;
+        if (e.from == e.to){          // to itself
+            e.directed = false;
+        }
+        e.from.add(e);                // add to list of from node
+        e.from.outDegree++;           // update out-degree of source node
+        if (e.directed){              // directed
+            e.to.inDegree++;          // update in-degree of target node
+        } else {                      // undirected
+            if (e.from != e.to){      // no self-loop
+                e.to.add(e);          // add also the way back
+            }
+            e.to.outDegree++;
+        }
+        this.edges.add(e);            // append to list
+        e.index = this.numOfEdges++;  // update edges count
+        return e;
+    }
+
+    // deliver a string representing this graph
+    this.toString = function(){
+        var s = "";
+        s += this.name;
+        s += ':';
+        var first = true;
+        for (var i = this.nodes.iterator(); i.hasNext();){
+            var v = i.next();
+            if ((v.inDegree + v.outDegree) == 0){
+                if (!first) s.append(',');
+                first = false;
+                s += v.toString();
+                continue;
+            }
+            for (var j = v.edgelist.iterator(); j.hasNext();){
+                var e = j.next();
+                if (e != null){
+                    if (!e.directed){              // undirected
+                        if (e.toNode(v).index < v.index){
+                            continue;              // show only one
+                        }
+                    }
+                }
+                if (!first) s.append(',');
+                first = false;
+                if (e == null){                    // placeholder
+                    s += v.toString();
+                    s += '-';
+                } else {
+                    s += e.toString();
+                }
+            }
+        }
+        return s;
+    }
+
+    // trace this graph. Undirected edges are reported on both endpoints.
+    // Each edge has attached its unique sequence number that allows to
+    // tell when it is different from another, and when it is the same.
+    this.trace = function(){
+        var str = "graph: " + this.name;
+        if ((this.kind & Graph.DIRECTED) != 0) str += " directed";
+        if ((this.kind & Graph.MIXED) != 0) str += " mixed";
+        if ((this.kind & Graph.ORDERED) != 0) str += " ordered";
+        if ((this.kind & Graph.WEIGHTED) != 0) str += " weighted";
+        if ((this.kind & Graph.MULTIGRAPH) != 0) str += " multigraph";
+        if ((this.kind & Graph.ACYCLIC) != 0) str += " acyclic";
+        console.log(str);
+        for (var i = this.nodes.iterator(); i.hasNext();){
+            var v = i.next();
+            console.log("node: " + v.toString() + " (" + v.index + ") ->" +
+                v.inDegree + " " + v.outDegree + "->");
+            for (var j = v.edgelist.iterator(); j.hasNext();){
+                var e = j.next();
+                if (e == null){
+                    console.log("  -");
+                } else {
+                    console.log("  " + e + "(" + e.index + ")");
+                }
+            }
+        }
+        console.log("edges");
+        for (var i = this.edges.iterator(); i.hasNext();){
+            var e = i.next();
+            console.log("  " + e);
+        }
+    }
+}
+Object.defineProperty(Graph,"DIRECTED",{value: 1 << 0});
+Object.defineProperty(Graph,"MIXED",{value: 1 << 1});
+Object.defineProperty(Graph,"ORDERED",{value: 1 << 2});
+Object.defineProperty(Graph,"WEIGHTED",{value: 1 << 3});
+Object.defineProperty(Graph,"MULTIGRAPH",{value: 1 << 4});
+Object.defineProperty(Graph,"ACYCLIC",{value: 1 << 5});
+
+// a node
+function Node(){
+    this.name = "";                      // name of the node
+    this.index = 0;                      // index of the node
+    this.edgelist = new LinkedList();    // list of edges (outgoing if directed)
+    this.inDegree = 0;                   // number of incoming undirected edges
+    this.outDegree = 0;                  // number of outgoing (un)directed edges
+    this.extras = null;                  // extra data
+    this.inedgelist = new LinkedList();  // list of incoming edges
+
+    // deliver a string representing this node
+    this.toString = function(){
+        if (this.name == null) return "$" + this.index;
+        return this.name;
+    }
+
+    // clone this object
+    this.clone = function(){
+        var n = new Node();
+        for (var i in this){
+            n[i] = this[i];
+        }
+        return n;
+    }
+
+    // deliver a string representing this node and its leaving edges
+    this.symbolic = function(){
+        var s = "";
+        s += toString();
+        for (var j = this.edgelist.iterator(); j.hasNext();){
+            var e = j.next();
+            s += ' ';
+            if (e == null) s += "null";
+            else s += e.toString();
+        }
+        return s;
+    }
+
+    // add an edge to the list of this node
+    this.add = function(e){
+        this.edgelist.add(e);
+        e.to.inedgelist.add(e);
+    }
+
+    // tell if there is an edge from this node to the specified one
+    this.edgeTo = function(to){
+        for (var j = this.edgelist.iterator(); j.hasNext();){
+            var e = j.next();
+            if (e.to == to){
+                return e;
+            }
+        }
+        return null;
+    }
+}
+
+// an edge
+function Edge(){
+    this.name = "";          // the identity of the edge. Not required to be unique
+    this.index = 0;          // the index of the edge
+    this.directed = false;   // whether it has a direction. The ones with the same endpoints are not directed
+    this.from = null;        // the leaving (from) endpoint. When undirected, an enpoint
+    this.to = null;          // the entering (to) endpoint. When undirected, the other enpoint
+    this.extras = null;      // extra data
+
+    // deliver a string representing this edge
+    this.toString = function(){
+        return this.from.name + '-' + this.name +
+            '-' + (this.directed ? ">" : "") + this.to.name;
+    }
+
+    // clone this object
+    this.clone = function(){
+        var n = new Edge();
+        for (var i in this){
+            n[i] = this[i];
+        }
+        return n;
+    }
+
+    // deliver the other enpoint: for directed edges it is the
+    // target one, for the undirected edges it is the other endpoint
+    this.toNode = function(from){
+        if (this.directed) return this.to;      // directed edge
+        if (from == this.from) return this.to;  // the other one
+        return this.from;                       // the opposite
+    }
+}
+
+</script>
+<script>
+// graph drawing
+
+// graph extra data
+function GraphExtras(){
+    this.colSize = 120;          // size of column
+    this.rowSize = 100;          // size of row
+    this.svg = null;             // reference to the picture
+}
+
+// node extra data
+function NodeExtras(){
+    this.background = "white";   // background color
+    this.svgShape = null;        // shape of the node
+    this.svgLabel = null;        // label on the shape
+    this.svgLLabel = null;       // long label on the shape
+    this.longLabel = "";         // long label
+    this.r = 20;                 // radius
+    this.graph = null;           // reference to the graph
+    this.state = null;           // reference to the state
+}
+
+// create a new node with the specified data
+function newNode(graph,name,backround,llabel){
+    var ex = new NodeExtras();
+    ex.background = backround;
+    ex.longLabel = llabel;
+    ex.graph = graph;
+    var n = graph.newNode(name);
+    n.extras = ex;
+    return n;
+}
+
+// edge extra data
+function EdgeExtras(){
+    this.label = "";             // label
+    this.svgPath = null;
+    this.knots = [];
+}
+
+// create a new edge with the specified data
+function newEdge(graph,name,label,from,to){
+    var ex = new EdgeExtras();
+    ex.label = label;
+    var e = graph.newEdge(from,to,name,true);
+    e.extras = ex;
+    return e;
+}
+
+var currentElement = null;          // element being dragged
+var currentX = 0;                   // current coords of pointer
+var currentY = 0;
+
+// make the element movable
+function grabElement(evt){
+    evt.preventDefault();           // prevent default drag-n-drop
+    currentElement = evt.target;
+    currentX = evt.clientX;
+    currentY = evt.clientY;
+    currentElement.style.cursor = "grab";
+
+    var obj = evt.target.myGraphRef;
+    if (obj instanceof Node){
+        var el = obj.extras.svgLLabel;
+        el.style.display = "none";
+    }
+}
+
+// make the movable element firm
+function releaseElement(evt) {
+    evt.preventDefault();           // prevent default drag-n-drop
+    if (currentElement != null){
+        currentElement.style.cursor = "move";
+        currentElement = null;
+    }
+}
+
+// drag the movable element
+function dragElement(evt){
+    evt.preventDefault();           // prevent default drag-n-drop
+    if (currentElement == null) return;
+    var dx = evt.clientX - currentX;
+    var dy = evt.clientY - currentY;
+    currentX = evt.clientX;
+    currentY = evt.clientY;
+    var cur = currentElement.myGraphRef;
+    if (cur instanceof Node){
+        var el = cur.extras.svgShape;
+        el.cx.baseVal.value += dx;
+        el.cy.baseVal.value += dy;
+        var cx = parseFloat(el.getAttributeNS(null,"cx"));
+        var cy = parseFloat(el.getAttributeNS(null,"cy"));
+        el = cur.extras.svgLabel;
+        var x = parseFloat(el.getAttributeNS(null,"x"));
+        var y = parseFloat(el.getAttributeNS(null,"y"));
+        el.setAttributeNS(null,"x",x+dx);
+        el.setAttributeNS(null,"y",y+dy);
+        // drag all outgoing edges
+        for (var i = cur.edgelist.iterator(); i.hasNext();){
+            var e = i.next();
+            var knots = e.extras.knots;
+            knots[0] = [cx+dx,cy+dy];
+            knots[4] = [parseFloat(e.to.extras.svgShape.getAttributeNS(null,"cx")),
+                parseFloat(e.to.extras.svgShape.getAttributeNS(null,"cy"))];
+            makeStraightSpline(e,knots,dx,dy);
+            updateSpline(e);
+
+            el = e.extras.svgLabel;
+            var x = parseFloat(el.getAttributeNS(null,"x"));
+            var y = parseFloat(el.getAttributeNS(null,"y"));
+            el.setAttributeNS(null,"x",knots[2][0]);
+            el.setAttributeNS(null,"y",knots[2][1]-20);
+
+        }
+        // drag all incoming edges
+        for (var i = cur.inedgelist.iterator(); i.hasNext();){
+            var e = i.next();
+            if (e.to == e.from) continue;                 // autoloop, done above
+            var knots = e.extras.knots;
+            knots[0] = [parseFloat(e.from.extras.svgShape.getAttributeNS(null,"cx")),
+                parseFloat(e.from.extras.svgShape.getAttributeNS(null,"cy"))];
+            knots[4] = [cx+dx,cy+dy];
+            makeStraightSpline(e,knots,dx,dy);
+            updateSpline(e);
+
+            el = e.extras.svgLabel;
+            var x = parseFloat(el.getAttributeNS(null,"x"));
+            var y = parseFloat(el.getAttributeNS(null,"y"));
+            el.setAttributeNS(null,"x",knots[2][0]);
+            el.setAttributeNS(null,"y",knots[2][1]-20);
+        }
+    } else if (cur instanceof Edge){
+        // update the coords of the moved knot
+        var circle = currentElement;
+        if (currentElement.tagName == "foreignObject"){    // dragging label
+            circle = reuseKnots[1];
+        }
+        circle.cx.baseVal.value += dx;
+        circle.cy.baseVal.value += dy;
+        var n = currentElement.myGraphRefn;
+        var knot = cur.extras.knots[n];
+        var cx = parseFloat(circle.getAttributeNS(null,"cx"));
+        var cy = parseFloat(circle.getAttributeNS(null,"cy"));
+        knot[0] = cx;
+        knot[1] = cy;
+
+        // when moving the middle knot, move also the others on the arc between the nodes.
+        if (n == 2){          // middle knot, move also the others
+            var m = 0.8;
+
+            // autoloop
+            if (cur.to == cur.from){
+                // rotate and translate the other points
+                var cir = cur.to.extras.svgShape;
+                var x0 = parseFloat(cir.getAttributeNS(null,"cx"));
+                var y0 = parseFloat(cir.getAttributeNS(null,"cy"));
+                var r = parseFloat(cir.getAttributeNS(null,"r"));
+                var p = intersectCirRad(r/2,cx,cy,x0,y0);
+                var px = p[0];    // point on the line from knot to center at distance r/2
+                var py = p[1];
+                var lr = line2(cx,cy,x0,y0);  // line from knot to center
+                var a = -lr.b;    // parameters of the normal of lr
+                var b = lr.a;
+                var c = -a * px - b * py;
+                var x1 = 0;       // determine another point of the normal
+                var y1 = 0;
+                if (b == 0){
+                    y1 = 0;
+                    x1 = -c / a;
+                } else {
+                    y1 = -c / b;
+                }
+                var p1 = intersectCirRad(r/2,px,py,x1,y1);   // point at distance r/2 from p on the normal
+                var p1x = p1[0];
+                var p1y = p1[1];
+                var d1x = p1x - px;    // determine the symmetrical
+                var d1y = p1y - py;
+                var p2x = px - d1x;
+                var p2y = py - d1y;
+                var k = cur.extras.knots[1];
+                k[0] = p1x;
+                k[1] = p1y
+                var c = reuseKnots[0];           // update it because it is visible
+                c.cx.baseVal.value = k[0];
+                c.cy.baseVal.value = k[1];
+                k = cur.extras.knots[3];
+                k[0] = p2x;
+                k[1] = p2y;
+                c = reuseKnots[2];
+                c.cx.baseVal.value = k[0];
+                c.cy.baseVal.value = k[1];
+            } else {
+                var k = cur.extras.knots[1];
+                k[0] += dx * m;
+                k[1] += dy * m;
+                var c = reuseKnots[0];           // update it because it is visible
+                c.cx.baseVal.value += dx * m;
+                c.cy.baseVal.value += dy * m;
+                k = cur.extras.knots[3];
+                k[0] += dx * m;
+                k[1] += dy * m;
+                c = reuseKnots[2];
+                c.cx.baseVal.value += dx * m;
+                c.cy.baseVal.value += dy * m;
+            }
+        }
+
+        updateSpline(cur);
+        if (n == 2){          // middle knot, move the label
+            el = cur.extras.svgLabel;
+            var x = parseFloat(el.getAttributeNS(null,"x"));
+            var y = parseFloat(el.getAttributeNS(null,"y"));
+            el.setAttributeNS(null,"x",knot[0]);
+            el.setAttributeNS(null,"y",knot[1]-20);
+        }
+    }
+}
+
+// determine the parameters of the line that passes from the specified two points
+function line2(x1,y1,x2,y2){
+    var a = y2 - y1;
+    var b = x1 - x2;
+    var c = - x1 * a - y1 * b;
+    return {"a":a,"b":b,"c":c};
+}
+
+// update the spline of the specified edge
+function updateSpline(edge){
+    var nk = edge.extras.knots.length;
+    // get the coordinates of the knots
+    var x = [];
+    var y = [];
+    for (var i = 0; i < nk; i++){
+        var k = edge.extras.knots[i];
+        x[i] = k[0];
+        y[i] = k[1];
+    }
+    // compute the control points p1 and p2 for x and y
+    var px = computeControlPoints(x);
+    var py = computeControlPoints(y);
+    //
+    // x,y         [0]      [1]      [2]      [3]      [4]
+    // px.p1,py.p1    [0]      [1]      [2]      [3]
+    // px.p2,py.p2       [0]      [1]      [2]      [3]
+	
+    // compute the intersection with the from node
+    var r = edge.from.extras.r;
+    var x1 = x[0];
+    var y1 = y[0];
+    var x2 = px.p1[0];
+    var y2 = py.p1[0];
+    var intr = intersectCirRad(r,x1,y1,x2,y2);
+
+    // use the translated tangents and the intersections as endpoints
+    var dx = x2 - x1;
+    var dy = y2 - y1;
+    var segments = edge.extras.svgPath.pathSegList;
+    var seg = segments.getItem(0);   // moveto
+    seg.x = intr[0];
+    seg.y = intr[1];
+    seg = segments.getItem(1);       // first curveto
+    seg.x1 = intr[0]+dx;
+    seg.y1 = intr[1]+dy;
+    seg.x2 = px.p2[0];
+    seg.y2 = py.p2[0];
+    seg.x = x[1];
+    seg.y = y[1];
+
+    // compute the intersection with the to node
+    r = edge.to.extras.r;
+    x1 = x[nk-1];
+    y1 = y[nk-1];
+    x2 = px.p2[nk-2];
+    y2 = py.p2[nk-2];
+    intr = intersectCirRad(r,x1,y1,x2,y2);
+    dx = x2 - x1;
+    dy = y2 - y1;
+    seg = segments.getItem(nk-1);    // last curveto
+    seg.x1 = px.p1[nk-2];
+    seg.y1 = py.p1[nk-2];
+    seg.x2 = intr[0]+dx;
+    seg.y2 = intr[1]+dy;
+    seg.x = intr[0];
+    seg.y = intr[1];
+
+    // update the path
+    for (var i = 1; i < nk-2; i++){
+        seg = segments.getItem(i+1);
+        seg.x1 = px.p1[i];
+        seg.y1 = py.p1[i];
+        seg.x2 = px.p2[i];
+        seg.y2 = py.p2[i];
+        seg.x = x[i+1];
+        seg.y = y[i+1];
+    }
+    // showFrame(edge.extras.svgPath);
+}
+
+// compute the control points for the specified knots's coordinates
+// see: http://www.particleincell.com/blog/2012/bezier-splines/
+function computeControlPoints(K){
+    var p1 = [];
+    var p2 = [];
+    var n = K.length - 1;
+	
+    // rhs vector
+    var a = [];
+    var b = [];
+    var c = [];
+    var r = [];
+	
+    // first segment
+    a[0] = 0;
+    b[0] = 2;
+    c[0] = 1;
+    r[0] = K[0] + 2*K[1];
+	
+    // intermediate segments
+    for (var i = 1; i < n-1; i++){
+        a[i] = 1;
+        b[i] = 4;
+        c[i] = 1;
+        r[i] = 4 * K[i] + 2 * K[i+1];
+    }
+    // last segment
+    a[n-1] = 2;
+    b[n-1] = 7;
+    c[n-1] = 0;
+    r[n-1] = 8*K[n-1] + K[n];
+
+    // solves Ax = b with the Thomas algorithm
+    for (var i = 1; i < n; i++){
+        var m = a[i] / b[i-1];
+        b[i] += - m * c[i - 1];
+        r[i] += - m * r[i-1];
+    }
+    trace('r',"computeControlPoints r",r,"b",b);
+    // compute the first control points for all the knots
+    p1[n-1] = r[n-1] / b[n-1];
+    for (var i = n-2; i >= 0; i--){
+        p1[i] = (r[i] - c[i] * p1[i+1]) / b[i];
+    }
+    // compute the second control points for all the knots
+    for (var i = 0; i < n-1; i++){
+        p2[i] = 2 * K[i+1] - p1[i+1];
+    }
+    p2[n-1] = 0.5 * (K[n] + p1[n-1]);
+    trace('r',"computeControlPoints",K,"p1:",p1,"p2:",p2);
+    return {p1:p1, p2:p2};
+}
+
+// determine the intersection between the specified line and a circumference
+// centered in the first line point and having the specified radius
+function intersectCirRad(r,x1,y1,x2,y2){
+    var a = Math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
+    var y = (y2 - y1) * r / a + y1;
+    var x = (x2 - x1) * r / a + x1;
+    trace('r',"intersectCirRad",r,x1,y1,x2,y2,":",x,y);
+    return [x,y];
+}
+
+// draw the specified graph
+function drawGraph(graph){
+    if ('r' in trc){
+        graph.trace();
+    }
+    // let's start with the first node, and put it in a column, then put the ones reached
+    // by it in a second column, and the ones reached by the second column in the third, etc.
+    var columns = [];
+    var currCol = [];
+    columns[0] = currCol;
+    currCol.push(graph.nodes.getFirst());
+    for (;;){
+        trace('r',"cycle",columns.length,"scan",currCol.length);
+        var nextCol = [];
+        for (var i = 0; i < currCol.length; i++){
+            var n = currCol[i];
+            trace('r',"currCol idx",i);
+            for (var e = n.edgelist.iterator(); e.hasNext();){
+                var j = e.next();
+                trace('r',"edge",j.toString());
+                var to = j.to;
+                // if not present in any columns, including the new one, add
+                var found = false;
+                sea: {
+                    for (var k = 0; k < columns.length; k++){
+                        for (var h = 0; h < columns[k].length; h++){
+                            if (columns[k][h] == to){
+                                found = true;
+                                break sea;
+                            }
+                        }
+                    }
+                    for (var h = 0; h < nextCol.length; h++){
+                        if (nextCol[h] == to){
+                            found = true;
+                            break sea;
+                        }
+                    }
+                }
+                if (!found){
+                    trace('r',"push",to);
+                    nextCol.push(to);
+                }
+            }
+        }
+        if (nextCol.length > 0){
+            columns.push(nextCol);
+            currCol = nextCol;
+        } else {
+            break;
+        }
+    }
+    var max = 0;
+    for (var i = 0; i < columns.length; i++){
+        trace('r',"col",i,columns[i].length);
+        max = Math.max(max,columns[i].length);
+        var col = columns[i];
+        for (var j = 0; j < col.length; j++){
+            trace('r',"node",col[j].toString());
+        }
+    }
+    // now determine the size of the picture
+    var width = columns.length * graph.extras.colSize;
+    var height = max * graph.extras.rowSize;
+
+    var envel = document.getElementById("dfasvg");
+    envel.innerHTML = "<svg width=0 height=0 onmouseup=releaseElement(evt) " +
+        "onmousemove=dragElement(evt) onmouseenter=releaseElement(evt) id=svgdfa>\n" +
+        "<defs><marker id=markerArrow markerWidth=8 markerHeight=7 refx=8 refy=3 orient=auto>\n"+
+        "    <path d=\"M0,0 L2,3 L0,6 L8,3 L0,0\" style=\"fill:black;\" stroke-linecap=\"round\" />\n"+
+        "</marker></defs></svg>\n" +
+        "<div id=overlay class=overlay></div>\n" +
+        "<div id=left class=lefthandle></div>\n" +
+        "<div id=bottom class=bottomhandle></div>";
+    var s = document.getElementById("svgdfa");
+    s.setAttributeNS(null,"width",width);
+    s.setAttributeNS(null,"height",height);
+
+    envel.style.width = width + "px";
+    envel.style.height = height + "px";
+    var left = document.getElementById("left");
+    var bottom = document.getElementById("bottom");
+    var overlay = document.getElementById("overlay");
+    overlay.style.width = envel.offsetWidth + "px";
+    overlay.style.height = envel.offsetHeight + "px";
+    overlay.style.display = "none";
+    overlay.style.top = "0px";
+    left.style.top = "0px";
+    left.style.left = (envel.offsetWidth - 4) + "px";
+    left.style.height = (envel.offsetHeight - 4) + "px";
+    left.addEventListener("mousedown",grabBorder,false);
+    left.addEventListener("mouseup",releaseBorder,false);
+    bottom.style.top = (envel.offsetHeight - 4) + "px";
+    bottom.style.width = (envel.offsetWidth + 1) + "px";
+    bottom.addEventListener("mousedown",grabBorder,false);
+    bottom.addEventListener("mouseup",releaseBorder,false);
+
+    graph.extras.svg = s;
+    s.extras = graph;
+    var longlabels = document.getElementById("dfasvglabels");
+    longlabels.innerHTML = "";
+
+    // build the paths for the spline frames
+    svgFrames = [];
+    for (var i = 0; i < 5; i++){
+        var path = document.createElementNS("http://www.w3.org/2000/svg","path");
+        path.setAttributeNS(null,"fill","none");
+        path.setAttributeNS(null,"stroke","gray");
+        path.setAttributeNS(null,"stroke-width",1);
+        path.setAttributeNS(null,"d","M0,0 L0,0 L0,0 L0,0");
+        svgFrames[i] = path;
+        s.appendChild(path);
+    }
+
+    // now place the nodes evenly spaced in columns
+    var colw = width / columns.length;
+    for (var i = 0; i < columns.length; i++){
+        var col = columns[i];
+        var sepnr = col.length + 1;        // number of separating spaces
+        var step = height / sepnr;
+        for (var j = 0; j < col.length; j++){
+            var c = document.createElementNS("http://www.w3.org/2000/svg","circle");
+            c.setAttributeNS(null,"r",col[j].extras.r);
+            c.setAttributeNS(null,"cx",i*colw + colw/2);
+            var cy = step*(j+1);
+            if (col.length == max){
+                // fullest column, place nodes in the middle of their rows, leaving then
+                // less space at the ends
+                cy = (graph.extras.rowSize / 2) + graph.extras.rowSize * j;
+            }
+            c.setAttributeNS(null,"cy",cy);
+            trace('r',"drawGraph",col[j],i*colw + colw/2,step*(j+1));
+            c.setAttributeNS(null,"fill",col[j].extras.background);
+            c.setAttributeNS(null,"stroke","black");
+            c.setAttributeNS(null,"stroke-width","1");
+            c.setAttributeNS(null,"onmousedown","grabElement(evt)");
+            c.setAttributeNS(null,"onmouseenter","showState(evt)");
+            c.setAttributeNS(null,"onmouseleave","hideState(evt)");
+            c.setAttributeNS(null,"class","draggable");
+            c.style.cursor = "move";
+            c.myGraphRef = col[j];
+            col[j].extras.svgShape = c;
+            s.appendChild(c);
+
+            // label
+            var t = document.createElementNS("http://www.w3.org/2000/svg","foreignObject");
+            var tb = document.getElementById("textBox");
+            tb.innerHTML = col[j].name;
+            var w = tb.clientWidth + 1;
+            var h = tb.clientHeight + 1;
+            t.setAttributeNS(null,"width",w);
+            t.setAttributeNS(null,"height",h);
+            t.setAttributeNS(null,"x",i*colw + colw/2 - w/2);
+            t.setAttributeNS(null,"y",cy - 9);
+            t.setAttributeNS(null,"class","draggable");
+            t.setAttributeNS(null,"onmousedown","grabElement(evt)");
+            t.setAttributeNS(null,"onmouseenter","showState(evt)");
+            t.setAttributeNS(null,"onmouseleave","hideState(evt)");
+            t.style.cursor = "move";
+            t.textContent = col[j].name;
+            t.myGraphRef = col[j];
+            col[j].extras.svgLabel = t;
+            s.appendChild(t);
+
+            // long label
+            t = document.createElement("DIV");
+            t.className = "longlabel";
+            longlabels.appendChild(t);
+            col[j].extras.state.traceHtml1(t);
+            col[j].extras.svgLLabel = t;
+        }
+    }
+
+    // now place the edges and their labels
+    var edgenr = 0;
+    for (var i = graph.nodes.iterator(); i.hasNext();){
+        var n = i.next();
+        trace('r',"node",n);
+        for (var j = n.edgelist.iterator(); j.hasNext();){
+            var e = j.next();
+            var knots = e.extras.knots;
+            knots[0] = [parseFloat(e.from.extras.svgShape.getAttributeNS(null,"cx")),
+                parseFloat(e.from.extras.svgShape.getAttributeNS(null,"cy"))];
+            knots[4] = [parseFloat(e.to.extras.svgShape.getAttributeNS(null,"cx")),
+                parseFloat(e.to.extras.svgShape.getAttributeNS(null,"cy"))];
+            makeStraightSpline(e,knots);
+            trace('r',"drawGraph edge",e,knots[0]," ",knots[1]," ",knots[2]," ",knots[3]," ",knots[4]);
+            var path = document.createElementNS("http://www.w3.org/2000/svg","path");
+            path.setAttributeNS(null,"fill","none");
+            path.setAttributeNS(null,"stroke","black");
+            path.setAttributeNS(null,"stroke-width",1);
+            path.setAttributeNS(null,"d","M0,0 C0,0 0,0 0,0 C0,0 0,0 0,0 C0,0 0,0 0,0 C0,0 0,0 0,0");
+            path.setAttributeNS(null,"marker-end","url(#markerArrow)");
+            path.setAttributeNS(null,"class","edgedrag");
+            path.setAttributeNS(null,"onmouseenter","showKnots2(evt)");
+            path.setAttributeNS(null,"id","e"+edgenr);
+            edgenr++;
+            path.myGraphRef = e;
+            e.extras.svgPath = path;
+            s.appendChild(path);
+            updateSpline(e);
+
+            // the label, anchored to the middle knot
+            t = document.createElementNS("http://www.w3.org/2000/svg","foreignObject");
+            var tb = document.getElementById("textBox");
+            tb.innerHTML = e.extras.label;
+            var w = tb.clientWidth + 1;
+            var h = tb.clientHeight + 1;
+            t.setAttributeNS(null,"width",w);
+            t.setAttributeNS(null,"height",h);
+// no, it should be set on the normal, and this is different for parallel edges and autoloops
+// well, perhaps I should take the middle knot as a base and then offset from it, but only
+// if I can compute the tangent
+            t.setAttributeNS(null,"x",knots[2][0]-w/2);
+            t.setAttributeNS(null,"y",knots[2][1]-20);
+            t.setAttributeNS(null,"class","draggable");
+            t.setAttributeNS(null,"onmousedown","grabElement(evt)");
+            t.setAttributeNS(null,"onmouseenter","showKnots2(evt)");
+            t.innerHTML = e.extras.label;
+            t.myGraphRef = e;
+            t.myGraphRefn = 2;
+            e.extras.svgLabel = t;
+            s.appendChild(t);
+        }
+    }
+
+    // create the reusable knots
+    for (var i = 0; i < 3; i++){
+        reuseKnots[i] = createReusableKnot(s);
+    }
+}
+
+// set the intermediate ones of the specified knots so as to draw a straight spline,
+// or an arc for parallel lines, or a loop (translated if dx and dy specified)
+function makeStraightSpline(e,knots,dx,dy){
+    var x0 = knots[0][0];
+    var y0 = knots[0][1];
+    var xn = knots[4][0];
+    var yn = knots[4][1];
+    var deltax = xn - x0;
+    var deltay = yn - y0;
+    if (e.to == e.from){                 // autoloop
+        if (arguments.length > 2){
+            knots[1] = [knots[1][0]+dx,knots[1][1]+dy];
+            knots[2] = [knots[2][0]+dx,knots[2][1]+dy];
+            knots[3] = [knots[3][0]+dx,knots[3][1]+dy];
+        } else {
+            var r = e.from.extras.r;
+            var x1 = x0 + r;
+            var y1 = y0 + r;
+            var inter = intersectCirRad(r,x1,y1,x1+r,y1+r);
+            knots[1] = [x1,y1+r*0.7];
+            knots[2] = inter;
+            knots[3] = [x1+r*0.7,y1];
+        }
+    } else if (e.to.edgeTo(e.from)){     // two edges, same nodes
+        var Dx = xn - x0;
+        var Dy = yn - y0;
+        var distq = Dx*Dx + Dy*Dy;
+        var dist = Math.sqrt(distq);
+        var D = 15;
+        var E = 12;
+        var Dxd = Dx/dist;
+        var Dyd = Dy/dist;
+        if (e.from.index < e.to.index){
+            knots[1] = [x0 + Dx/3 + E*Dyd,y0 + Dy/3 - E*Dxd];
+            knots[2] = [x0 + Dx/2 + D*Dyd,y0 + Dy/2 - D*Dxd];
+            knots[3] = [xn - Dx/3 + E*Dyd,yn - Dy/3 - E*Dxd];
+        } else {
+            knots[1] = [x0 + Dx/3 + E*Dyd,y0 + Dy/3 - E*Dxd];
+            knots[2] = [x0 + Dx/2 + D*Dyd,y0 + Dy/2 - D*Dxd];
+            knots[3] = [xn - Dx/3 + E*Dyd,yn - Dy/3 - E*Dxd];
+        }
+    } else {
+        knots[1] = [x0 + deltax/3,y0 + deltay/3];
+        knots[2] = [x0 + deltax/2,y0 + deltay/2];
+        knots[3] = [xn - deltax/3,yn - deltay/3];
+    }
+}
+
+var currentbElement = null;          // element being dragged
+var currentbX = 0;                   // current coords of pointer
+var currentbY = 0;
+
+// grab the border
+function grabBorder(evt){
+    evt.preventDefault();            // prevent default drag-n-drop
+    currentbElement = evt.target;
+    currentbX = evt.clientX;
+    currentbY = evt.clientY;
+    currentbElement.style.cursor = "grab";
+    if (currentbElement.id == "left"){
+        currentbElement.style.cursor = "col-resize";
+    } else if (currentbElement.id == "bottom"){
+        currentbElement.cursor = "row-resize";
+    }
+    document.getElementById("overlay").style.display = "block";
+    document.addEventListener("mousemove",dragBorder,false);
+}
+
+// release the grab on the border
+function releaseBorder(evt) {
+    evt.preventDefault();           // prevent default drag-n-drop
+    if (currentbElement != null){
+        var envel = document.getElementById("dfasvg");
+        if (currentbElement.id == "left"){
+            currentbElement.style.cursor = "w-resize";
+            envel.style.width = overlay.offsetWidth + "px";
+            document.getElementById("svgdfa").setAttributeNS(null,"width",overlay.offsetWidth);
+        } else if (currentbElement.id == "bottom"){
+            currentbElement.style.cursor = "s-resize";
+            envel.style.height = overlay.offsetHeight + "px";
+            document.getElementById("svgdfa").setAttributeNS(null,"height",overlay.offsetHeight);
+        }
+        currentbElement = null;
+        document.getElementById("overlay").style.display = "none";
+    }
+    document.removeEventListener("mousemove",dragBorder,false);
+}
+
+// drag the border
+function dragBorder(evt){
+    evt.preventDefault();           // prevent default drag-n-drop
+    if (currentbElement == null) return;
+    var dx = evt.clientX - currentbX;
+    var dy = evt.clientY - currentbY;
+    currentbX = evt.clientX;
+    currentbY = evt.clientY;
+    if (currentbElement.id == "left"){
+        var le = currentbElement.offsetLeft;
+        currentbElement.style.left = (le+dx) + "px";
+        document.getElementById("overlay").style.width = (le+dx + 3) + "px";
+        document.getElementById("bottom").style.width = (le+dx + 5) + "px";
+    } else if (currentbElement.id == "bottom"){
+        var top = currentbElement.offsetTop;
+        currentbElement.style.top = (top+dy) + "px";
+        document.getElementById("overlay").style.height = (top+dy + 3) + "px";
+        document.getElementById("left").style.height = (top+dy - 1) + "px";
+    }
+}
+
+// display a postit containing the contents of the state
+function showState(evt){
+    if (currentElement != null) return;  // element grabbed
+    evt.preventDefault();                // prevent default drag-n-drop
+    var node = evt.target.myGraphRef;
+    var el = node.extras.svgLLabel;
+    el.style.display = "block";
+
+    var s = node.extras.svgShape;
+    var cx = parseFloat(s.getAttributeNS(null,"cx"));
+    var cy = parseFloat(s.getAttributeNS(null,"cy"));
+
+    var svg = node.extras.graph.extras.svg;
+    el.style.left = svg.parentNode.offsetLeft + (cx + node.extras.r) + "px";
+    el.style.top = svg.parentNode.offsetTop + (cy + node.extras.r) + "px";
+}
+
+// display the postit containing the contents of the state
+function hideState(evt){
+    evt.preventDefault();           // prevent default drag-n-drop
+    var node = evt.target.myGraphRef;
+    var el = node.extras.svgLLabel;
+    el.style.display = "none";
+}
+
+var reuseKnots = [];       // array of reusable knots
+
+// create a reusable knot
+function createReusableKnot(svg){
+    var k = document.createElementNS("http://www.w3.org/2000/svg","circle");
+    k.setAttributeNS(null,"r",4);
+    k.setAttributeNS(null,"fill","Azure");
+    k.setAttributeNS(null,"stroke","black");
+    k.setAttributeNS(null,"stroke-width","1");
+    k.setAttributeNS(null,"onmousedown","grabElement(evt)");
+    k.setAttributeNS(null,"class","draggable");
+    k.setAttributeNS(null,"style","display:none;cursor:move");
+    svg.appendChild(k);
+    return k;
+}
+
+// show the knots
+function showKnots2(evt){
+    var el = evt.target;
+    var edge = el.myGraphRef;
+    for (var i = 0; i < 3; i++){
+        var k = reuseKnots[i];
+        k.myGraphRef = edge;
+        k.myGraphRefn = i+1;
+        k.style.display = "";
+        k.setAttributeNS(null,"cx",edge.extras.knots[i+1][0]);
+        k.setAttributeNS(null,"cy",edge.extras.knots[i+1][1]);
+    }
+    setTimeout(function(){hideKnots2();},2000);
+}
+
+// hide the knots
+function hideKnots2(evt){
+    for (var i = 0; i < 3; i++){
+        var k = reuseKnots[i];
+        k.style.display = "none";
+    }
+}
+
+// show the frame of a spline
+function showFrame(spi,svg){
+    var spisegments = spi.pathSegList;
+    var len = spisegments.numberOfItems;
+    var pi;
+    var c1;
+    var c2;
+    var pf;
+    for (var i = 0; i < len; i++){
+        var segment = spisegments.getItem(i);
+        if (i == 0){
+            pi = [segment.x,segment.y];
+        } else {
+            c1 = [segment.x1,segment.y1];
+            c2 = [segment.x2,segment.y2];
+            pf = [segment.x,segment.y];
+            // draw frame
+            var frsegs = svgFrames[i-1].pathSegList;
+            var frseg = frsegs.getItem(0);
+            frseg.x = pi[0];
+            frseg.y = pi[1];
+            frseg = frsegs.getItem(1);
+            frseg.x = c1[0];
+            frseg.y = c1[1];
+            frseg = frsegs.getItem(2);
+            frseg.x = c2[0];
+            frseg.y = c2[1];
+            frseg = frsegs.getItem(3);
+            frseg.x = pf[0];
+            frseg.y = pf[1];
+            pi = pf;
+        }
+    }
+}
+
+var svgFrames = null;      // svg paths for the spline frames
+</script>
+<script>
+// animate the matching
+
+// at each step there is a runner that walks the graph running on the edges and staying a
+// little on states, and at each step a new row in a table is drawn with the items.
+// At the end of matching, an animation shows the marking from the final items backwards,
+// and another the choosing of the prior tree
+
+var lastStateTab;
+function addStateItems(state){
+    var tab = "<table class=rho border=\"1\" style=\"display:inline-block;vertical-align:top;\">"
+    tab += "<tr><td> state: " + state.number + "</td></tr>";
+    for (var i = 0; i < state.items.length; i++){
+        tab += "<tr><td>" + i + ":" + bsItemToString(state.items[i]) + "</td></tr>";
+    }
+    tab += "</table>";
+    var el = document.createElement("span");
+    el.innerHTML += tab;
+    document.getElementById("dfaprogress").appendChild(el);
+    lastStateTab = el.firstChild;
+    flashGlow(lastStateTab);
+}
+
+// draw a flashing shadow border on the specified element
+function flashGlow(ele){
+    ele.style.animation = "blink 0.5s linear";
+    ele.style.webkitAnimation = "blink 0.5s linear";
+    ele.addEventListener("animationend",function(){
+        ele.style.animation = "";
+        ele.style.webkitAnimation = "";},
+        false);
+    ele.addEventListener("webkitAnimationEnd",function(){
+        ele.style.animation = "";
+        ele.style.webkitAnimation = "";},
+        false);
+}
+
+// draw a flashing shadow border on the specified svg element
+function flashGlowSvg(ele){
+    ele.style.animation = "blinksvg 0.5s linear";
+    ele.style.webkitAnimation = "blinksvg 0.5s linear";
+    ele.addEventListener("animationend",function(){
+        ele.style.animation = "";
+        ele.style.webkitAnimation = "";},
+        false);
+    ele.addEventListener("webkitAnimationEnd",function(){
+        ele.style.animation = "";
+        ele.style.webkitAnimation = "";},
+        false);
+}
+
+// animation along a path, defined because Firefox has a bug in animatemotion
+function animatemotion(){
+    this.element = null;      // the shape to move
+    this.path = null;         // the path along with the move has to occur
+    this.dur = 0;             // the duration
+    this.clock = null;        // the clock
+    this.endfun = null;       // end function
+    this.abort = false;       // request to abort animation
+    this.ticks = 0;           // number of frames to play
+    this.point = {"x":0,"y":0};
+    this.point1 = {"x":0,"y":0};
+    this.curtic = 0;          // current frame
+
+    // initialize
+    this.init = function(ele,path,dur,end){
+        this.element = ele;
+        this.path = path;
+        this.dur = dur;
+        this.endfun = end;
+        this.ticks = dur / 50;    // 20 frames/sec
+        this.curtic = 0;
+        this.abort = false;
+        clearInterval(this.clock);
+        this.clock = null;
+        ele.setAttribute("transform","rotate(0,0,0)");
+    }
+
+    // start the motion
+    this.beginElement = function(){
+        clearInterval(this.clock);
+        this.clock = setInterval(this.play.bind(this),50);
+        this.curtic = 0;
+        this.abort = false;
+        this.play();
+    }
+
+    // end the motion
+    this.endElement = function(){
+        clearInterval(this.clock);
+        this.clock = null;
+        this.abort = true;
+    }
+
+    // pause the motion
+    this.pauseElement = function(){
+        clearInterval(this.clock);
+        this.clock = null;
+        this.paused = true;
+    }
+
+    // resume the motion
+    this.resumeElement = function(){
+        if (this.paused){
+            this.paused = false;
+            this.clock = setInterval(this.play.bind(this),50);
+        }
+    }
+
+    // move the element
+    this.play = function(){
+        this.curtic++;
+        if (this.abort || this.curtic == this.ticks){
+            this.endElement();
+            return this.endfun.call(this);
+        }
+        var ratioDone = this.curtic / this.ticks;
+        this.pointAt(ratioDone - 0.01,this.point);
+        this.pointAt(ratioDone + 0.01,this.point1);
+        var angle = Math.atan2(this.point1.y-this.point.y,this.point1.x-this.point.x)*180 / Math.PI;
+
+        // move the shape to next point on the path 
+        this.pointAt(ratioDone,this.point);
+        this.element.setAttributeNS(null,"x",this.point.x-20);
+        this.element.setAttributeNS(null,"y",this.point.y-20);
+        this.element.transform.baseVal.getItem(0).setRotate(angle,this.point.x,this.point.y);
+    }
+
+    // compute the point at the specified percent along the path
+    this.pointAt = function(perc,point){
+        if (perc < 0) perc = 0;
+        lined: {
+            // this is for a bug in Firefox: when the points are lined up, getTotalLength
+            // delivers 0: compute here instead the length
+            var segments = this.path.pathSegList;
+            var len = segments.numberOfItems;
+            var s = segments.getItem(0);
+            var x0 = s.x;
+            var y0 = s.y;
+            s = segments.getItem(len-1);
+            var xn = s.x;
+            var yn = s.y;
+            for (var i = 1; i < len; i++){
+                s = segments.getItem(i);
+                var x = s.x1;
+                var y = s.y1;
+                if ((y-y0)*(xn-x0) - (x-x0)*(yn-y0) > 0.01) break lined;
+                x = s.x2;
+                y = s.y2;
+                if ((y-y0)*(xn-x0) - (x-x0)*(yn-y0) > 0.01) break lined;
+                x = s.x;
+                y = s.y;
+                if ((y-y0)*(xn-x0) - (x-x0)*(yn-y0) > 0.01) break lined;
+            }
+            len = Math.sqrt((xn-x0)*(xn-x0) + (yn-y0)*(yn-y0));
+            len = len * perc;
+            var a = Math.sqrt((xn - x0) * (xn - x0) + (yn - y0) * (yn - y0));
+            point.x = (xn - x0) * len / a + x0;
+            point.y = (yn - y0) * len / a + y0;
+            return;
+        }
+        // the control points of the path are not lined up
+        if (perc > 0){
+            len = this.path.getTotalLength();
+            len = len * perc;
+            var p = this.path.getPointAtLength(len);
+            point.x = p.x;
+            point.y = p.y;
+        } else {
+            var segments = this.path.pathSegList;
+            var s = segments.getItem(0);
+            point.x = s.x;
+            point.y = s.y;
+        }
+    };
+}
+
+// a movie player
+function MovieClass(){
+    this.clock = null;             // clock interval timer
+    this.tick = 0;                 // period, in millisecs
+    this.frame = 0;                // number of frame played
+    this.extras = null;            // extra data
+    this.play = null;              // play callback
+    this.pause = null;             // pause callback
+    this.stop = null;              // stop callback 
+    this.state = 0;                // 0: created, 1: playing, 2: paused, 3: stopped, 4: ended
+    this.playButton = null;        // play/pause button
+    this.stopButton = null;        // stop button
+
+    // deliver a string representing this player
+    this.toString = function(){
+        var str = "movie " + this.tick + " frame:" + this.frame;
+        return str;
+    }
+
+    // initialize the player
+    this.createMovie = function(tick,play,pause,stop,framelist){
+        this.tick = tick;
+        this.frame = 0;
+        this.play = play;
+        this.pause = pause;
+        this.stop = stop;
+    }
+
+    // play the movie
+    this.playMovie = function(){
+        this.state = 1;
+        if (this.frame == 0){      // begin movie
+            // start the movie
+        }
+        if (this.clock == null){
+            this.clock = setInterval(this.playMovie.bind(this),this.tick);
+        }
+        this.play.call(this);
+        this.frame++;
+    }
+
+    // pause the movie
+    this.pauseMovie = function(){
+        if (this.state != 1) return;
+        this.state = 2;
+        if (this.pause != null) this.pause.call(this);
+        // firing again the interval timer changes the timing because some time since the
+        // previous tick has been already passed. It would be more correct to start a timer
+        // for the remaining time that calls a function that starts the interval.
+        // However there would be a need to take this into account when another pause/play
+        // is done.
+        // When the tick is small (or the timing is not much important) there it no need for this.
+        clearInterval(this.clock);
+        this.clock = null;
+    }
+
+    // stop the movie
+    this.stopMovie = function(){
+        if (this.state == 3 || this.state == 4) return;
+        this.state = 3;
+        if (this.stop != null) this.stop.call(this);
+        clearInterval(this.clock);
+        this.clock = null;
+        this.frame = 0;
+        if (this.playButton != null){
+            this.playButton.innerHTML = "play &#x25b6;";
+        }
+    }
+
+    // end the movie
+    this.endMovie = function(){
+        this.state = 4;
+        clearInterval(this.clock);
+        this.clock = null;
+        this.frame = 0;
+        if (this.playButton != null){
+            this.playButton.innerHTML = "play &#x25b6;";
+        }
+    }
+
+    // callback for the play/pause button
+    function playButton(evt){
+        var movie = this.myMovie;
+        switch (movie.state){
+        case 0: case 2: case 3: case 4:
+            this.innerHTML = "pause &#x2225;";
+            if (movie.state == 4){
+                clearInterval(movie.clock);
+                movie.frame = 0;           // replay
+            }
+            movie.playMovie();
+            break;
+        default:                           // playing
+            this.innerHTML = "play &#x25b6;";
+            movie.pauseMovie();
+        }
+    }
+
+    // callback for the stop button
+    function stopButton(evt){
+        var movie = this.myMovie;
+        movie.stopMovie();
+        movie.playButton.innerHTML = "play &#x25b6;";
+    }
+
+    // create the buttons as children of the specified element
+    this.createButtons = function(el){
+        var that = this;
+        this.playButton = document.createElement("BUTTON");
+        this.playButton.innerHTML = "play &#x25b6;";
+        this.playButton.onclick = playButton;
+        this.playButton.myMovie = this;
+        el.appendChild(this.playButton);
+        this.stopButton = document.createElement("BUTTON");
+        this.stopButton.innerHTML = "stop &#x25fc;";
+        this.stopButton.onclick = stopButton;
+        this.stopButton.myMovie = this;
+        el.appendChild(this.stopButton);
+    }    
+}
+
+function matchAnimateExtras(){
+    this.frameList = null;         // list of frames in forward ordering
+    this.frameBack = null;         // list of frames in backward ordering
+    this.currframe = null;         // current frame
+    this.svg = null;
+    this.pathanimation = null;     // path animation
+    this.mpath = null;             // path in it
+    this.runner = null;            // the runner
+    this.still = null;             // the runner still
+    this.seated = null;            // the runner seated
+    this.phase = 0;                // phase: 0: matching, 1 marking, 2 pruning
+    this.player = null;            // reference to the player
+    this.ani = null;               // animatemotion simulator
+
+    // deliver a string representing this object
+    this.toString = function(){
+        return "phase " + this.phase + " frame: " + this.player.frame + " state: " + this.player.state;
+    }
+}
+
+var ffAnimatemotionBug = true;   // ff bug on gettotallength not yet solved
+
+function matchAnimate(){
+    if (stateList == null){       // no match done
+        return;
+    }
+
+    document.getElementById("playerbuttons").innerHTML = "";
+    document.getElementById("animatephase").innerHTML = "";
+    document.getElementById("dfaprogress").innerHTML = "";
+
+    var movie = new MovieClass();
+    movie.extras = new matchAnimateExtras();
+    movie.extras.player = movie;
+    movie.createMovie(500,myplay,mypause,mystop,new matchAnimateExtras());
+    movie.createButtons(document.getElementById("playerbuttons"));
+    // get the head of the forward list of pnodes
+    for (var i = stateList; i != null; i = i.next){
+        movie.extras.frameList = i;
+    }
+    movie.extras.frameBack = stateList;
+    movie.extras.svg = document.getElementById("svgdfa");
+
+    var runner = document.createElementNS("http://www.w3.org/2000/svg","image");
+    movie.extras.runner = runner;
+    runner.width.baseVal.value = 42;
+    runner.height.baseVal.value = 19;
+    runner.href.baseVal = "data:image/gif;base64," +
+        "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";
+    movie.extras.svg.appendChild(runner);
+    runner.style.display = "none";
+
+    var still = document.createElementNS("http://www.w3.org/2000/svg","image");
+    movie.extras.still = still;
+    still.width.baseVal.value = 20;
+    still.height.baseVal.value = 27;
+    still.href.baseVal = "data:image/gif;base64," +
+        "R0lGODlhsQDuAPZmAAAAABkQCAMIEAsREyEZEDEhDDshCAAALAgQKRAVIRUiKRApMRApOh4xPC" +
+        "EhISkpLzMzMzo6OkcpEFIpEGYzAHs8CGY6EEExKVc6IXNCGVhCLElCOAgQSgsZTCE6QhAcZRkp" +
+        "axkpdiZCSjVBSCRKVSxSYzJbaTVjc0hISl5KRl5aT0JKUlJSUmZmZnNzaHNzc3l7fYRFEIxKGZ" +
+        "RKEItSEa1SEKVaHLlaGZplDbV7EJxSIbxjIal3JcVjIcVrIc5rKdZzKd57McWQHd6QHeWlLv+1" +
+        "Mf23QP/KRiEphCExjyk6nCk8pTFrhDFCrTFKvUJzlEp7lEqEnGuMnE2PrVKctVqlxWOtzmO11m" +
+        "u11mu93nPF5nPF73vO9Hve/4WGiJmZma2tpbC1tczMzN3f1/Dt7f///wAAAAAAAAAAAAAAAAAA" +
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+        "AAAAAAAAAAACH5BAVGAGYALAAAAACxAO4AAAf/gGaCg4SFhoeIiYqLjI2Oj5CRkpOUlZaXmJma" +
+        "m5ydnp+goaKjpKWmp6ipqqusra6vsJ4tEbQiIhAosbq7ji4oDQ0iJSVPU1RTTyQJMLzNzmYoCQ" +
+        "0nT1VXWlxdXFtbXV0kD8/irigKDCdU11xcWVhYVvBWWFskLOP3pywRCyVUWdzt4gnE8u9EAnwI" +
+        "RW140ICJlW3t3lm5QrHivyxMACQ81IKFx48eW2xkVM5DFGxaKqpcqWXLFA8DRg5SMeAAh5s4cy" +
+        "JAsKFQiwcR7OFjocCkli5Z4K1cmYXLlRIJesoUBIDDkiZYsS7ZuhVJCA4CIgyCICDEgZjjEphs" +
+        "mnTiUotb/7I8WUBgKiEHB5Ak2bsVqxMnTf42+SrA3pcDS5xw0OjMwYInWLikfMtSy5QGjO0S2j" +
+        "BAQQcQoEEgUaIkq9YPB8yEYXHg74fMsVAIKGFly2TKFVtWKSFAquZCYsJ8caHiwgABAhCILp01" +
+        "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" +
+        "auGZguDoEAADs=";
+    movie.extras.svg.appendChild(still);
+    still.style.display = "none";
+
+    var seated = document.createElementNS("http://www.w3.org/2000/svg","image");
+    movie.extras.seated = seated;
+    seated.width.baseVal.value = 40;
+    seated.height.baseVal.value = 31;
+    seated.href.baseVal = "data:image/gif;base64," +
+        "R0lGODlhKAAfAPf/AB8fUBgWaisrdiIheTU1e15YZkdHdk1bfbJhHrtnH75sI89tHcRtI8JwLN" +
+        "Z2KMt7NdB9Nt1/MOF+JrF1Rrd6QZSFEr+vJte6AefSAuvRAOjRD9TINLqBUbeFXryKXaWlVLyL" +
+        "Y7OPbLeRbr+VarORdrWVfL6dfsOBRsWESsqJV8SOXMCRZsGSb8iZa9OXY9Geb8KYcsqcccCbes" +
+        "ifesyheuLRTCIhiDU1jSUnlSotlCUimSYonikrnzY3mCkloycroC0xqjU2pD1AhTdAkUtOiVhY" +
+        "mmFfjWVkh2NjlGhnkGZokGxulHR0k396llNjpV14o2lop31+pXl3sm+DkWuEmnyOnXyUo3+ZsH" +
+        "egu3+jyX+oyYaLiJyZi5CZm7OZiYGTpIiXpYebpoiap4ufr4SfsoyfsZukrYais4umtoulvI6q" +
+        "vJSksZSos5Wsu6GirKmnrqaorainu7Gut6eyubK7v8aihMqmhc2ohcWkisqmiM2qi9iqgdGriN" +
+        "GukNuzkti3mN27ndC5otm6oNK9rdm/qM+/tMbAp9TCr93Dr9vUp8bBssXJutHNstnFudvKu+HD" +
+        "pObMsJ6exYGqxICszIuvzIexzo2yzJewxJWyyJq3ypy4yY210o693Je50Zq70pa/3KurwaG2xa" +
+        "S6xqy6xaa7zLi8w66v1KO+0I+/45a64pDC25zC3azAy73Bw7PCy7rGzaLB1K7C0KHH3qjH37bK" +
+        "2bnN2pTB4prE4pXG6JvL65fP8ZvO85vS9pzU+6nL5rfK4bvS4KPV9aHV+6Tb/qjd/6ri/rHm/8" +
+        "HBwsXLzsjNz9XMxdzNwNLSyt7ZzsXF1MXN08vN0dDP1MTR1cTU287Y3NTU09rX1tHV2tTY2Nvb" +
+        "2uXUxOrZx+HWyerayebc1OHf3dvh3eXi1uHg3uvk3e3q3vDn3MHV4szX4M3Z4cza6NLb4Nja4N" +
+        "HV7Nfj4t7i4+Ph4Onn5evr7PLr4/Du7PLx6+vu8fHv8+zw8vT08/j39Pb49v379fL1+/f7/f39" +
+        "/QAAACH5BAUAAP8ALAAAAAAoAB8AAAj/AP8JHEiwoMGD/46xOXUPocOC+B7+u6bpVq9MESU6dE" +
+        "OgSKmD82LZGtZLDTaNDkHl4PHDRpyC2TDxImZrDjyUCNcJuBEkCJAh4gZWSzNsmKdkOB0yOVIE" +
+        "SE8cSAR+I0MsWJs5x5IihIasR5AcQXZA+UcPzLBbVcacQaYVoTOwBMKa+jcH1acqliZ9bHvwWo" +
+        "4ecnr0sEfP0rBcuXSJ4uuQyI1/RaT4A3erKLFO1RgjjPYyypJ4+GQVzfVFmuaHTAy88ZduFzFM" +
+        "aKjNmXf6YJFI8RYZWjWsTCYzi2sbbFKASwULdHZtWnNllPCC4TRkuIAhkb1Ow8hw0vScILkaGz" +
+        "4w//Ln7xmuYLxW0etO8FeqfuT1wRomzBd7guZIkSevLtewULTd9880ruznTz6z7DIFUgJK84qB" +
+        "/tSCCyXuGDRPIfEQ9M0hOLkiDYTT9OLLegTdo0ICJAzEjwcLjJDRQ6OcAyEtuoiRFUF6ONAAJA" +
+        "TdEQEDemh0CToGunMLFlZUSNALDLBQUD0cSLCCROJwAsw+5DGTxiqsZFjQHwpwY5AyCHjx0DFU" +
+        "FJOLEkkYAcABXbxz0DIoIDTBIA/BoUUxwQyhQwADsIPPiwSNAwNCIGzjED90VEKMMU74MAASzR" +
+        "BK0DsiIOoIPoTRI0853BBCAwVhcCKJKlkI8cQWCpywggx83FCRRx00tIDCA4H00YEyzOyxBx4Q" +
+        "PMCBByCEQEIJJJhghx+KSPNMK9iA0w4z2nTTzTbbaKNNI4gIAogfMaTgAjnWxKDCDI8s4408lg" +
+        "rorkMBAQA7";
+    movie.extras.svg.appendChild(seated);
+    seated.style.display = "none";
+
+    if (!ffAnimatemotionBug){
+        // to be used when Firefox has the bug fixed
+        var animate = document.createElementNS("http://www.w3.org/2000/svg","animateMotion");
+        animate.setAttribute("begin","indefinite");
+        animate.setAttribute("dur","1s");
+        animate.setAttribute("fill","freeze");
+        animate.setAttribute("rotate","auto");
+        animate.myMovie = movie;
+        animate.addEventListener('endEvent',pathAnimationEnd,false);
+        movie.extras.pathanimation = animate;
+        movie.extras.mpath = document.createElementNS("http://www.w3.org/2000/svg","mpath");
+        animate.appendChild(movie.extras.mpath);
+        // attach it to the runner
+        runner.appendChild(animate);
+    } else {
+        movie.extras.ani = new animatemotion();
+        movie.extras.ani.init(runner,null,1000,pathAnimationEnd);
+        movie.extras.ani.myMovie = movie;
+    }
+
+    // connect the pnodes in forward ordering
+    var list = new LinkedList();
+    for (var i = stateList; i != null; i = i.next){
+        list.prepend(i);
+        if (list.head.next != null) i.suc = list.head.next.val;        // set the forward pointers
+    }
+}
+
+// terminate the animation of the runner along an edge, and dispay the next state
+function pathAnimationEnd(){
+    // hide the runner, display the still
+    this.myMovie.extras.runner.style.display = "none";
+    if (this.myMovie.extras.currframe.suc == null){
+        return;
+    }
+    var to = this.myMovie.extras.currframe.to.node.extras.svgShape;
+    var cx = parseFloat(to.getAttributeNS(null,"cx"));
+    var cy = parseFloat(to.getAttributeNS(null,"cy"));
+    if (this.myMovie.extras.currframe.suc.suc == null){ // last one
+        var seated = this.myMovie.extras.seated;
+        seated.style.display = "";
+        seated.setAttributeNS(null,"x",cx-20);
+        seated.setAttributeNS(null,"y",cy-18);
+    } else {
+        var still = this.myMovie.extras.still;
+        still.style.display = "";
+        still.setAttributeNS(null,"x",cx-10);
+        still.setAttributeNS(null,"y",cy-15);
+    }
+    flashGlowSvg(to);
+    addStateItems(this.myMovie.extras.currframe.suc.from);
+    this.myMovie.extras.currframe.suc.elem = lastStateTab;
+}
+    
+// make the next frame in the movie
+function myplay(){
+    var svg = this.extras.svg;
+    if (!ffAnimatemotionBug){
+        if (svg.animationsPaused()){
+            svg.unpauseAnimations();
+            return;
+        }
+    } else {
+        if (this.extras.ani.paused){
+            this.extras.ani.resumeElement();
+        }
+    }
+
+    //twriteln("myplay",this.extras);
+    if (this.frame == 0){      // begin movie
+        document.getElementById("dfaprogress").innerHTML = "<p>States encountered:<p>";
+        document.getElementById("animatephase").textContent = "matching";
+        var firstnode = this.extras.frameList.from.node.extras.svgShape;
+        var cx = parseFloat(firstnode.getAttributeNS(null,"cx"));
+        var cy = parseFloat(firstnode.getAttributeNS(null,"cy"));
+        if (this.extras.frameList.suc == null){    // first and also last one
+            this.extras.seated.style.display = "";
+            this.extras.seated.setAttributeNS(null,"x",cx-20);
+            this.extras.seated.setAttributeNS(null,"y",cy-18);
+        } else {
+            this.extras.still.style.display = "";
+            this.extras.still.setAttributeNS(null,"x",cx-10);
+            this.extras.still.setAttributeNS(null,"y",cy-15);
+        }
+        flashGlowSvg(firstnode);
+        addStateItems(this.extras.frameList.from);
+        this.extras.frameList.elem = lastStateTab;
+        this.extras.currframe = null;
+        return;
+    }
+    mat: if (this.extras.phase == 0){
+        if ((this.frame-1) % 3 == 0){        // one every two
+            if (this.extras.currframe == null){
+                this.extras.currframe = this.extras.frameList;
+            } else {
+                this.extras.currframe = this.extras.currframe.suc;
+            }
+            if (this.extras.currframe.suc == null){   // end of matching
+                if (BS_AUGM){
+                    this.extras.phase = 1;
+                } else {
+                    this.endMovie();
+                    document.getElementById("animatephase").textContent = "";
+                    this.extras.phase = 0;
+                }
+                this.extras.currframe = null;
+                break mat;
+            }
+            this.extras.still.style.display = "none";
+            this.extras.seated.style.display = "none";
+            this.extras.runner.style.display = "";
+            // get the path of the edge
+            var from = this.extras.currframe.from.node;
+            var to = this.extras.currframe.to.node;
+            var edge = from.edgeTo(to);
+            if (!ffAnimatemotionBug){
+                this.extras.mpath.setAttributeNS("http://www.w3.org/1999/xlink","href",
+                    "#" + edge.extras.svgPath.getAttributeNS(null,"id"));
+                this.extras.pathanimation.beginElement();
+            } else {
+                this.extras.ani.path = edge.extras.svgPath;
+                this.extras.ani.beginElement();
+            }
+        }
+    }
+    mar: if (this.extras.phase == 1){                      // marking
+        if (this.extras.currframe == null){
+            this.extras.currframe = this.extras.frameBack;
+            document.getElementById("animatephase").textContent = "marking";
+        } else {
+            this.extras.currframe = this.extras.currframe.next;
+            if (this.extras.currframe == null){         // end of marking
+                this.extras.phase = 2;
+                break mar;
+            }
+        }
+        var currpnode = this.extras.currframe;
+        for (var i = 0; i < currpnode.from.items.length; i++){
+            if (currpnode.iidNodes[i] == null) continue;
+            flashGlow(currpnode.elem.rows[i+1].cells[0]);
+            currpnode.elem.rows[i+1].style.backgroundColor = "Aqua";
+        }
+    }
+    pru: if (this.extras.phase == 2){                      // pruning
+        if (this.extras.currframe == null){
+            // if there is no pruning, skip this phase
+            var currpnode = this.extras.frameBack;
+            var pruned = false;
+            var iid = currpnode.activeIids[0];
+            for (var t = currpnode; t != null; t = t.next){    // take the first path of iid's
+                if (t.from.items[iid].left.size() > 1){
+                    pruned = true;
+                    break;
+                }
+                t.iid = iid;
+                if (t.next != null) iid = t.next.activeIids[iid];
+            }
+            if (!pruned){
+                this.endMovie();
+                document.getElementById("animatephase").textContent = "";
+                this.extras.phase = 0;
+                break pru;
+            } else {
+                this.extras.currframe = this.extras.frameList;
+                document.getElementById("animatephase").textContent = "pruning";
+            }
+        } else {
+            this.extras.currframe = this.extras.currframe.suc;
+            if (this.extras.currframe == null){   // end of matching
+                this.endMovie();
+                document.getElementById("animatephase").textContent = "";
+                this.extras.phase = 0;
+                break pru;
+            }
+        }
+        // spot the pruned items
+        var currpnode = this.extras.currframe;
+        for (var i = 0; i < currpnode.from.items.length; i++){
+            if (currpnode.iidNodes[i] == null) continue;
+            if (i != currpnode.iid){
+                flashGlow(currpnode.elem.rows[i+1].cells[0]);
+                var style = currpnode.elem.rows[i+1].style;
+                style.backgroundColor = "Beige";
+                style.transitionProperty = "background-color";
+                style.transitionDuration = "0.5s";
+            }
+        }
+    }
+}
+
+// pause the movie
+function mypause(){
+    if (!ffAnimatemotionBug){
+        var svg = this.extras.svg;
+        if (!svg.animationsPaused()){
+            svg.pauseAnimations();
+        }
+    } else {
+        this.extras.ani.pauseElement();
+    }
+}
+
+// stop the movie
+function mystop(){
+    if (!ffAnimatemotionBug){
+        this.extras.pathanimation.endElement();
+    } else {
+        this.extras.ani.endElement();
+    }
+    document.getElementById("animatephase").textContent = "";
+    document.getElementById("dfaprogress").innerHTML += "stopped";
+}
+
+</script>
+<script>
+// ---------- Items in B&S -----------------
+
+// symbol part in B&S augmented DFA's: it is made of a sequence of integers, that
+// behaves much the same as a string. Each element represents the entering or leaving of
+// a node in a path thru the AST. The elements are indexes of AST nodes with flags attached
+// tellig the entering or leaving (see below).
+function BSsymbol(){
+    // this is an array of indexes of ast nodes
+    this.arr = null;
+
+    // deliver a Html string representing this symbol
+    this.toString = function(){
+        var str = "";
+        for (var i = 0; i < this.arr.length; i++){
+            str += BSeleToString(this.arr[i]);
+        }
+        return str;
+    }
+
+    // deliver a plain string representing this symbol
+    this.toNoHtmlString = function(){
+        var str = "";
+        if (this.arr != null){
+            for (var i = 0; i < this.arr.length; i++){
+                str += BSeleToString(this.arr[i],true);
+            }
+        }
+        return str;
+    }
+
+    // tell if this symbol is equal to the specified one
+    this.equals = function(other){
+        return arraysIdentical(this.arr,other.arr);
+    }
+
+    // compare this symbol with the specified one
+    // this is good only for sorting because it sorts elements on their encodings
+    this.compareTo = function(other){
+        var n = this.arr.length;
+        if (other.arr.length < n) n = other.arr.length;
+        var i = 0;
+        var j = 0;
+        while (n-- != 0){
+            var c1 = this.arr[i++];
+            var c2 = other.arr[j++];
+            if (c1 != c2) return c1 - c2;
+        }
+        return this.arr.length - other.arr.length;
+    }
+
+    // deliver a new symbol taking the specified substring of this one
+    this.substring = function(begin, end){
+        var sym = new BSsymbol();
+        sym.arr = this.arr.slice(begin,end);
+        return sym;
+    }
+
+    // deliver the length of this symbol
+    this.length = function(){
+        return this.arr.length;
+    }
+
+    // deliver the element at the specified index
+    this.eleAt = function(i){
+        if (i < 0) return this.arr[this.arr.length+i];
+        return this.arr[i];
+    }
+
+    // deliver a trimmed object if the last element is not an open or a close
+    this.getTag = function(){
+        var ele = this.arr[this.arr.length-1];
+        var kind = BSeleKind(ele);
+        if (kind != ELEOPEN && kind != ELECLOSE){
+            return this.substring(0,-1);
+        }
+        return this;
+    }
+
+    // deliver a trimmed object if the first or last element is not an open or a close
+    this.tag = function(){
+        var start = 0;
+        var end = this.arr.length;
+        var trim = false;
+        var ele = this.arr[this.arr.length-1];
+        var kind = BSeleKind(ele);
+        if (kind != ELEOPEN && kind != ELECLOSE){
+            end = -1;
+            trim = true;
+        }
+        ele = this.arr[0];
+        var kind = BSeleKind(ele);
+        if (kind != ELEOPEN && kind != ELECLOSE){
+            start = 1;
+            trim = true;
+        }
+        if (trim){
+            return this.substring(start,end);
+        }
+        return this;
+    }
+
+    // append the elements of the specified symbol to this one
+    this.concat = function(other){
+        if (this.arr == null) this.arr = [];
+        this.arr = this.arr.concat(other.arr);
+    }
+
+    // tell if this symbol starts with the specified one
+    this.startsWith = function(other){
+        if (other.arr.length > this.arr.length) return false;
+        var i = other.arr.length;
+        while (i--){
+            if (this.arr[i] !== other.arr[i]) return false;
+        }
+        return true;
+    }
+
+    // tell if this symbol ends with the specified one
+    this.endsWith = function(other){
+        if (other.arr.length > this.arr.length) return false;
+        var i = other.arr.length;
+        var l = this.arr.length;
+        while (i--){
+            if (this.arr[--l] !== other.arr[i]) return false;
+        }
+        return true;
+    }
+}
+
+var ELEKIND = 1000000;            // field for the kind
+var ELEOPEN = 1;                  // entering
+var ELECLOSE = 2;                 // leaving
+
+// deliver a string representing the direction of the path (entering, leaving, passing)
+function BSeleKindToString(kind){
+    return ["leaf","open","close"][kind];
+}
+
+// deliver the reference to the AST node of the specified element
+function BSeleToAst(ele){
+    return astMap.get(ele % ELEKIND);
+}
+
+// deliver the position of the specified element
+function BSeleToPos(ele){
+    return astMap.get(ele % ELEKIND).pos;
+}
+
+// deliver the number of the AST node of the specified element
+function BSeleToAstNum(ele){
+    return ele % ELEKIND;
+}
+
+// deliver the kind of the specified element (direction of the path)
+function BSeleKind(ele){
+    return Math.floor(ele / ELEKIND);
+}
+
+// deliver the element corresponding to the specified ast and direction
+function astToBSele(ast,kind){
+    return ast.seq + kind*ELEKIND;
+}
+
+// tell if the specified element is a terminal (not epsilon)
+function isBSeleTerminal(ele){
+    if (Math.floor(ele / ELEKIND) == 0){
+        if (astMap.get(ele % ELEKIND).kind == 0) return true;
+    }
+    return false;
+}
+
+// check that the ele is an open or close parenthesis of a *|+ group
+function isEleRep(ele,kind){
+    var res = null;
+    doit: {
+        var k = BSeleKind(ele);
+        if (k != kind) break doit;
+        var ast = BSeleToAst(ele);
+        if (ast.kind == 3 && (ast.groupKind == G_RE0 || ast.groupKind == G_RE1)){
+            res = ast.pos;
+        }
+    } // doit
+    // trace('n',"isEleRep",BSeleToString(ele,true),posToString(res));
+    return res;
+}
+
+// check that the specified element is an open or closed parenthesis of a *|+ group
+// which is enclosed in another a *|+ group
+function isRep(ele,kind){
+    // trace('n',"isRep start",BSeleToString(ele,true),kind);
+    var res = null;
+    doit: {
+        var k = BSeleKind(ele);
+        if (k != kind) break doit;
+        res = isEleRep(ele,kind);
+        if (res != null) break doit;
+        var ast = BSeleToAst(ele);
+        if (ast.pos.length == 0) break doit;
+        var pos = ast.pos.slice(0,-1);
+        // visit all the ast and find the father of ele (the one that has one level less in its pos)
+        for (var i = 0; i < astMap.arr.length; i++){
+            var a = astMap.arr[i][1];
+            if (arraysIdentical(a.pos,pos)){
+                if (a.kind == 3 && (a.groupKind == G_RE0 || a.groupKind == G_RE1)){
+                    res = a.pos;
+                    break doit;
+                }
+            }
+        }
+    } // doit
+    // trace('n',"isRep",BSeleToString(ele,true),posToString(res));
+    return res;
+}
+
+// deliver a string representing the specified element
+function BSeleToString(ele,nohtml){
+    var str = "";
+    var eleKind = BSeleKind(ele);
+    var ast = BSeleToAst(ele);
+    if (eleKind == ELEOPEN){               // node entry
+        str += "("
+    } else if (eleKind == ELECLOSE){               // node exit
+        str += ")"
+    } else {
+        if (ast.kind == 0){       // terminal
+            str += ast.sym;
+        } else if (ast.kind == 1){
+            str += "|";
+        } else if (ast.kind == 2){
+            str += "\u00b7";
+        } else if (ast.kind == 4){
+            str += nohtml ? "\u03b5" : "&epsilon;";
+        } else {
+            str += nohtml ? "\u03b5" : "&epsilon;";   // a group without open or close flags acts as empty
+        }
+    }
+    if (nohtml){
+        str += posToString(ast.pos);
+    } else {
+        str += posToSub(ast.pos);
+    }
+    return str;
+}
+
+// deliver a new symbol
+function newBSsymbol(){
+    var sym = new BSsymbol();
+    sym.arr = [];
+    for (var i = 0; i < arguments.length; i++){
+        var arg = arguments[i];
+        if (arg instanceof BSsymbol){
+            sym.arr = sym.arr.concat(arg.arr);
+        } else {
+            sym.arr[sym.arr.length] = arg;
+        }
+    }
+    return sym;
+}
+
+// ---------- AST's -----------------
+
+var G_GRO = 0;    // ()
+var G_OPT = 1;    // []
+var G_RE0 = 2;    // ()*
+var G_RE1 = 3;    // ()+
+var G_BOD = 4;    // group body
+
+// deliver a string representing the specified kind
+function aKindToString(kind){
+    return ["term","alt","conc","group","empty"][kind];
+}
+
+// deliver a string representing the kind of the specified ast
+function astKindToString(ast){
+    var str = aKindToString(ast.kind);
+    if (ast.kind == 3){
+        str += groupIcon[ast.groupKind];
+    }
+    return str;
+}
+
+var GR_OPEN = "(";
+var GR_CLOSE = ")";
+
+// AST nodes
+function AstNode(){
+    this.seq = 0;              // sequence number
+    this.bro = null;           // brother
+    this.son = null;           // son
+    this.fat = null;           // father
+    this.kind = 0;             // 0: leaf, 1: alt, 2: conc, 3: group, 4: empty
+    this.sym = 0;              // kind = 0: symbol
+    this.groupKind = 0;        // kind of group (if group)
+    this.pos = [];             // sequence of indexes
+    this.cursor = 0;           // index in the input
+    this.isNull = false;       // B&S attributes
+    this.ini = new SetClass();
+    this.fin = new SetClass();
+    this.dig = new SetClass();
+    this.altnr = 0;            // number of alternative (when this node is an alternative)
+
+    // deliver a string representing this node
+    this.toString = function(){
+        var str = "ast seq: " + this.seq;
+        str += " pos:";
+        str += posToString(this.pos);
+        str += " ";
+        if (this.altnr != 0) str += "|" + this.altnr + " ";
+        if (this.kind == 0){
+            str += "leaf ";
+            str += this.sym;
+        } else if (this.kind == 1){
+            str += "alt ";
+        } else if (this.kind == 2){
+            str += "conc ";
+        } else if (this.kind == 4){
+            str += "\u03b5";
+        } else {
+            str += " ";
+            str += groupKind[this.groupKind];
+        }
+        str += " at: ";
+        str += this.cursor;
+        if (this.bro != null){
+            str += " bro: ";
+            str += this.bro.seq;
+        }
+        if (this.son != null){
+            str += " son: ";
+            str += this.son.seq;
+        }
+        if (this.fat != null){
+            str += " fat: ";
+            str += this.fat.seq;
+        }
+        str += " Null: " + this.isNull;
+        str += " Ini: ";
+        str += bsSetToString(this.ini,true);
+        str += " Fin: ";
+        str += bsSetToString(this.fin,true);
+        str += " Dig: ";
+        str += bsSetToString(this.dig,true);
+        return str;
+    }
+
+    // deliver a string representing the RE rooted in this node
+    this.toRE = function(nohtml){
+        if (this.arguments == 1) nohtml = false;
+        var str = ""
+        if (this.kind == 0){          // leaf
+            str += " ";
+            str += this.sym;
+            str += posToSub(this.pos,nohtml);
+        } else if (this.kind == 1){   // alt
+            for (var i = this.son; i != null; i = i.bro){
+                if (i != this.son) str += " |";
+                str += i.toRE(nohtml);
+            }
+        } else if (this.kind == 2){   // conc
+            for (var i = this.son; i != null; i = i.bro){
+                str += i.toRE(nohtml);
+            }
+        } else if (this.kind == 4){   // empty
+            if (nohtml){
+                str += " \u03b5";
+            } else {
+                str += " &epsilon;";
+            }
+            str += posToSub(this.pos,nohtml);
+        } else {                      // group
+            if (this.groupKind == G_OPT){
+                str += "[";
+            } else if (this.groupKind == G_BOD){
+                str += "\u00ab";
+            } else {
+                str += GR_OPEN;
+            }
+            str += posToSub(this.pos,nohtml);
+            str += this.son.toRE(nohtml);
+            if (this.groupKind == G_OPT){
+                str += "]";
+            } else if (this.groupKind == G_BOD){
+                str += "\u00bb";
+            } else {
+                str += GR_CLOSE;
+            }
+            str += groupSym[this.groupKind];
+            str += posToSub(this.pos,nohtml);
+        }
+        return str;
+    }
+
+    // deliver a string representing shortly this ast
+    this.shortly = function(){
+        var str = "ast seq: " + this.seq;
+        str += " pos:";
+        str += posToString(this.pos);
+        str += " ";
+        if (this.altnr != 0) str += "|" + this.altnr + " ";
+        if (this.kind == 0){
+            str += "leaf ";
+            str += this.sym;
+        } else if (this.kind == 1){
+            str += "alt ";
+        } else if (this.kind == 2){
+            str += "conc ";
+        } else if (this.kind == 4){
+            str += "\u03b5";
+        } else {
+            str += " ";
+            str += groupKind[this.groupKind];
+        }
+        return str;
+    }
+
+    // fields to draw the ast
+    this.width = 0;             // width of the subtree
+    this.height = 0;            // height of the subtree
+    this.iconWidth = 0;         // width of the root
+    this.iconHeight = 0;        // height of the root
+    // deliver the icon of the root
+    this.getIcon = function(){
+        var res = "";
+        switch (this.kind){
+        case 0: res += this.sym; break;
+        case 1: res += "|"; break;
+        case 2: res += "\u2219"; break;
+        case 3: res += groupIcon[this.groupKind]; break;
+        case 4: res += "&epsilon;"; break;
+        }
+        res += posToSub(this.pos);
+        if (this.altnr != 0) res += "<sup>|" + this.altnr + "</sup>";
+        return res;
+    }
+}
+
+var astSeq = 0;            // sequence number of ast nodes
+
+// deliver a new ast node with the specified kind
+function newAstNode(kind){
+    var node = new AstNode();
+    node.kind = kind;
+    node.cursor = cursor;
+    node.seq = astSeq++;
+    trace('a',"newAstNode",node.seq,kind);
+    astMap.set(node.seq,node);
+    return node;
+}
+var groupKind = [
+    "GRO","OPT","RE0","RE1","BOD"];
+var groupSym = [
+    "","","*","+",""];
+var groupIcon = [
+    GR_OPEN+GR_CLOSE,"[]",GR_OPEN+GR_CLOSE+"*",GR_OPEN+GR_CLOSE+"+","\u00ab\u00bb"];
+
+// deliver a string representing the specified set of BSsymbols
+function bsSetToString(set,nohtml){
+    var str = "";
+    str += "{";
+    if (set == null){
+        str += "null";
+    } else {
+        var first = true;
+        for (var i = 0; i < set.arr.length; i++){
+            if (first){
+                first = false;
+            } else {
+                str += ", ";
+            }
+            if (nohtml){
+                str += set.arr[i].toNoHtmlString();
+            } else {
+                str += set.arr[i].toString();
+            }
+        }
+    }
+    str += "}";
+    return str;
+}
+
+// deliver a string representing the specifed position
+function posToString(pos){
+    if (pos == null) return "null";
+    if (pos.length == 0) return "\u2227";
+    if (pos[0] == Number.MAX_VALUE) return "$";
+    var str = "";
+    for (var i = 0; i < pos.length; i++){
+        if (i > 0) str += '.';
+        str += pos[i];
+    }
+    return str;
+}
+
+// deliver a Html markup representing the specifed position, or a simple markup
+function posToSub(pos,nohtml){
+    if (arguments.length == 1) nohtml = false;
+    var str = "";
+    if (!nohtml) str += "<sub>";
+    if (pos.length == 0){
+        str += "\u2227";
+    }
+    if (pos[0] == Number.MAX_VALUE){
+        str += "$";
+    } else {
+        for (var i = 0; i < pos.length; i++){
+            if (i > 0) str += ".";
+            str += pos[i];
+        }
+    }
+    if (!nohtml) str += "</sub>";
+    return str;
+}
+
+// trace the subtree rooted in the specified ast
+function traceAst(ast){
+    for (var a = ast; a != null; a = a.bro){
+        twriteln("node:",a);
+        traceAst(a.son);
+    }
+}
+
+// number all the nodes rooted in the specified ast with their positions
+function setPosAst(ast,pos,fat){
+    if (ast == null) return;
+    ast.pos = pos;
+    ast.fat = fat;
+    var n = 1;
+    for (var a = ast.son; a != null; a = a.bro){
+        setPosAst(a,pos.concat([n]),ast);
+        n++;
+    }
+}
+
+// compare two positions
+function compareToPos(p1,p2){
+    trace('m',"compareToPos",posToString(p1),posToString(p2));
+    var n = p1.length;
+    if (p2.length < n) n = p2.length;
+    var i = 0;
+    var j = 0;
+    while (n-- != 0){
+        var c1 = p1[i++];
+        var c2 = p2[j++];
+        if (c1 != c2) return c1 - c2;
+    }
+    return p1.length - p2.length;
+}
+
+var astMap;     // map from integers to ast nodes
+
+var alphabet;       // the set of terminals
+
+// build the set of terminals present in the ast rooted in the specified node
+function astAlphabet(ast){
+    if (ast == null) return;
+    if (ast.kind == 0){
+        alphabet.push(ast.sym);
+    } else {
+        for (var a = ast.son; a != null; a = a.bro){
+            astAlphabet(a);
+        }
+    }
+}
+
+// ---------- Syntax analysis of a RE -----------------
+
+var curNode;    // current node
+var ast;        // current ast
+var astRoot;    // root ast
+var cursor;     // index in RE
+var re;         // re to be analysed
+
+// build the ast
+function buildAst(test){
+    trace('e',"buildAst");
+    astMap = new MapClass();
+    astSeq = 0;
+    error = false;
+    cursor = 0;
+    curNode = null;
+    expression();
+    if (error || getsym() != -1){    // error or whole re not consumed
+        if (!test){
+            ele = document.getElementById("error");
+            ele.selectionStart = cursor; // show the error
+            ele.selectionEnd = re.length;
+            ele.focus();
+            document.getElementById("error").textContent = "malformed RE " + errorMessage;
+            // trace('e',e.stack,e);
+        }
+        return;
+    }
+    if ('e' in trc){
+        for (var i = 0; i < astMap.size(); i++){
+            var entry = astMap.getEntry(i);
+            twriteln("buildAst astMap",entry[0],entry[1]);
+        }
+    }
+
+    ast = curNode;
+    setPosAst(ast,[],null);
+    if ('e' in trc){
+        traceAst(ast);
+    }
+
+    if (!test){
+        document.getElementById("annotated").innerHTML = ast.toRE();
+    }
+
+    eofAst = new newAstNode(0);
+    eofAst.sym = EOF;                    // eof
+    eofAst.pos = [Number.MAX_VALUE];
+    if (BS_AUGM){
+        computeAstNew(ast);
+    } else {
+        computeAst(ast);
+    }
+    if (error){
+        document.getElementById("error").textContent = errorMessage;
+        return;
+    }
+    if ('e' in trc){
+        twriteln("buildAst done ast:");
+        traceAst(ast);
+    }
+
+    if (!test){
+        drawAst(ast);
+    }
+    astRoot = ast;
+    buildBS(ast);
+}
+
+var eofAst;     // ast for the end of text
+var EOF = "\u22a2";
+
+// parse an expression
+function expression(){
+    trace('a',"expression start at:",cursor);
+    curNode = null;
+    var r = null;
+    var altnode = null;
+    doit: {
+        subexpression();                      // allow also nothing
+        if (error) return;
+        if (curNode == null){
+            curNode = newAstNode(4);          // return empty
+            curNode.sym = "\u03b5";
+        }
+        r = curNode;
+        var n = 1;
+        l: for (;;){
+            var sym = getsym();
+            if (sym < 0) break;
+            if (sym != "|"){
+                cursor--;
+                break;
+            }
+            if (altnode == null){
+                altnode = newAstNode(1);
+                altnode.son = r;
+                r = altnode.son;
+                r.altnr = n;
+            }
+            var q = curNode;                  // save
+            n++;
+            trace('a',"expression inner at:",cursor);
+            subexpression();                  // alternative, require a term
+            if (error) return;
+            if (curNode == null){
+                curNode = newAstNode(4);      // return empty
+                curNode.sym = "\u03b5";
+            }
+            r.bro = curNode;                  // store anyway
+            r = curNode;
+            r.altnr = n;
+        } // l;
+    } // doit
+    if (altnode != null){
+        curNode = altnode;
+    }
+    trace('a',"expression end at:",cursor,curNode,"re",curNode == null ? "" : curNode.toRE());
+}
+
+// parse a subexpression
+function subexpression(){
+    trace('a',"subexpression start at:",cursor);
+    curNode = null;
+    factor();
+    if (error) return;
+    var concnode = null;
+    var first = curNode;
+    if (curNode != null){
+        var q = curNode;
+        var n = 1;
+        l: for (;;){
+            var p = curNode;
+            n++;
+            trace('a',"subexpression inner at:",cursor);
+            factor();
+            if (error) return;
+            if (curNode != null){    // several terms
+                if (concnode == null){
+                    concnode = newAstNode(2);
+                    concnode.son = p;
+                    q = p;
+                }
+            } else {
+                curNode = p;
+                break;
+            }
+            q.bro = curNode;
+            q = curNode;
+        } // l
+    }
+    if (concnode != null){
+        curNode = concnode;
+    }
+    trace('a',"subexpression end at:",cursor,curNode,"re",curNode == null ? "" : curNode.toRE());
+}
+
+var STRUCTURED = false;
+// parse a factor
+function factor(){
+    trace('a',"factor start at:",cursor);
+    curNode = null;
+    var sym = getsym();
+    var groupnode = null;
+    trace('a',"factor sym",sym);
+    if (sym == -1){
+        trace('a',"factor return",error);
+        return;
+    } else if (sym == "|" || sym == GR_CLOSE || sym == "]"){
+        cursor--;
+    } else if (sym == "["){
+        expression();
+        if (error) return;
+        groupnode = newAstNode(3);
+        groupnode.groupKind = G_OPT;
+        groupnode.son = curNode;
+        if (getsym() != "]"){
+            error = true;
+            errorMessage = "syntax: ] not closed";
+            return;
+        }
+    } else if (sym == GR_OPEN){
+        trace('a',"factor group start");
+        expression();
+        if (error) return;
+        groupnode = newAstNode(3);
+        groupnode.groupKind = G_GRO;
+        groupnode.son = curNode;
+        if (getsym() != GR_CLOSE){
+            error = true;
+            errorMessage = "syntax: ) not closed";
+            return;
+        }
+        sym = getsym();
+        trace('a',"factor group end",sym);
+        if (sym == "*"){
+            if (STRUCTURED){
+                groupnode.groupKind = G_BOD;
+                var g = newAstNode(3);
+                g.groupKind = G_RE0;
+                g.son = groupnode;
+                groupnode = g;
+            } else {
+                groupnode.groupKind = G_RE0;
+            }
+        } else if (sym == "+"){
+            if (STRUCTURED){
+                groupnode.groupKind = G_BOD;
+                var g = newAstNode(3);
+                g.groupKind = G_RE1;
+                g.son = groupnode;
+                groupnode = g;
+            } else {
+                groupnode.groupKind = G_RE1;
+            }
+        } else if (sym != -1){
+            cursor--;
+        }
+    } else {
+        curNode = newAstNode(0);
+        curNode.sym = sym;
+    }
+    if (groupnode != null){
+        curNode = groupnode;
+    }
+    for (;;){
+        var sym = getsym();
+        if (sym == "*"){
+            groupnode = newAstNode(3);
+            groupnode.groupKind = G_RE0;
+            groupnode.son = curNode;
+        } else if (sym == "+"){
+            groupnode = newAstNode(3);
+            groupnode.groupKind = G_RE1;
+            groupnode.son = curNode;
+        } else if (sym != -1){
+            cursor--;
+            break;
+        } else {
+            break;
+        }
+        curNode = groupnode;
+    }
+
+    trace('a',"factor end at:",cursor,curNode,"re",curNode == null ? "" : curNode.toRE());
+}
+
+// get the next character from the RE
+function getsym(){
+    trace('b',"getsym cursor:",cursor,"re",re);
+    var res;
+    for (; cursor < re.length; cursor++){
+        if (re[cursor] != " ") break;
+    }
+    if (cursor >= re.length){   // eof
+        res = -1;
+    } else {
+        res = re[cursor++];
+    }
+    trace('b',"getsym ret cursor:",cursor,"re",re,"res",res);
+    return res;
+}
+
+</script>
+<script>
+// ---------- Building the B&S DFA  -----------------
+
+var BS_AUGM;     // whether we are building an augmented B&S
+
+// compute the B&S attributes for the subtree rooted in the specified ast node for the basic B&S
+function computeAst(ast){
+    trace('e',"computeAst:",ast,"sub-re:",ast.toRE());
+    switch (ast.kind){
+    case 0:                               // terminal
+        ast.isNull = false;
+        ast.ini = new SetClass();
+        ast.ini.add(newBSsymbol(ast.seq));
+        ast.fin = new SetClass();
+        ast.fin.add(newBSsymbol(ast.seq));
+        ast.dig = new SetClass();
+        break;
+    case 4:                               // empty
+        ast.isNull = true;                // empty
+        ast.ini = new SetClass();
+        ast.fin = new SetClass();
+        ast.dig = new SetClass();
+        break;
+    default:
+        ast.ini = new SetClass();
+        ast.fin = new SetClass();
+        ast.dig = new SetClass();
+        for (var a = ast.son; a != null; a = a.bro){
+            computeAst(a);
+        }
+    }
+    switch (ast.kind){
+    case 1:                       // alternative
+        trace('e',"computeAst: alt start",ast);
+        ast.isNull = false;
+        if (ast.son == null) ast.isNull = true;
+        for (var a = ast.son; a != null; a = a.bro){
+            ast.isNull |= a.isNull;
+            ast.ini.addAll(a.ini);
+            ast.fin.addAll(a.fin);
+            ast.dig.addAll(a.dig);
+        }
+        trace('e',"computeAst: alt end",ast);
+        break;
+    case 2:                       // concatenation
+        trace('e',"computeAst: conc start",ast);
+        var iniDone = false;
+        var lastNotNull = ast.son;         // in case all are null
+        var digfin = new SetClass();
+        for (var a = ast.son; a != null; a = a.bro){
+            trace('e',"computeAst: conc ele",a);
+            if (!a.isNull) lastNotNull = a;
+            ast.isNull &= a.isNull;
+            if (!iniDone){
+                ast.ini.addAll(a.ini);
+                if (!a.isNull){
+                    iniDone = true;
+                }
+            }
+            ast.dig.addAll(a.dig);
+            if (a != ast.son){                // first
+                var iniarr = a.ini.toArray();
+                var finarr = digfin.toArray();
+                for (var i = 0; i < finarr.length; i++){
+                    for (var j = 0; j < iniarr.length; j++){
+                        ast.dig.add(newBSsymbol(finarr[i],iniarr[j]));
+                    }
+                }
+            }
+
+            // compute the fin of all elements up to and including the current one
+            digfin.clear();
+            for (var aa = lastNotNull; aa != null; aa = aa.bro){
+                digfin.addAll(aa.fin);
+                if (aa == a) break;
+            }
+        }
+        for (var a = lastNotNull; a != null; a = a.bro){
+            ast.fin.addAll(a.fin);       // union of all those of the null tail + last not null
+        }
+        trace('e',"computeAst: conc end",ast);
+        break;
+    case 3:                               // sub-re
+        trace('e',"computeAst: group start",ast,"body",ast.son);
+        if (ast.groupKind == G_RE1 || ast.groupKind == G_GRO || ast.groupKind == G_BOD){
+            ast.isNull = ast.son.isNull;
+        } else {
+            ast.isNull = true;
+        }
+        ast.ini.clear();
+        var iniarr = ast.son.ini.toArray();
+        ast.ini.addAll(ast.son.ini);
+
+        ast.fin.clear();
+        var finarr = ast.son.fin.toArray();
+        ast.fin.addAll(ast.son.fin);
+
+        ast.dig.addAll(ast.son.dig);
+        digrams: {
+            if (STRUCTURED && (ast.groupKind == G_RE0 || ast.groupKind == G_RE1)) break digrams;  // body does it ???
+            if (ast.groupKind != G_GRO && ast.groupKind != G_OPT){
+                for (var i = 0; i < finarr.length; i++){
+                    for (var j = 0; j < iniarr.length; j++){
+                        ast.dig.add(newBSsymbol(finarr[i],iniarr[j]));
+                    }
+                }
+            }
+        } // digrams
+        trace('e',"computeAst: group end",ast);
+        break;
+    }
+    if (ast.pos.length == 0){           // top node
+        var e = eofAst;
+        var finarr = ast.fin.toArray();
+        for (var i = 0; i < finarr.length; i++){
+            ast.dig.add(newBSsymbol(finarr[i],e.seq));
+        }
+    }
+    trace('e',"computeAst done:",ast);
+}
+
+// compute the B&S attributes for the subtree rooted in the specified ast node for the augmented B&S
+function computeAstNew(ast){
+    trace('e',"computeAst:",ast,"sub-re:",ast.toRE());
+    switch (ast.kind){
+    case 0:                               // terminal
+        ast.isNull = false;
+        ast.ini = new SetClass();
+        ast.ini.add(newBSsymbol(astToBSele(ast,ELEOPEN),ast.seq));
+        ast.fin = new SetClass();
+        ast.fin.add(newBSsymbol(ast.seq,astToBSele(ast,ELECLOSE)));
+        ast.dig = new SetClass();
+        ast.dig.addAll(ast.ini);
+        ast.dig.addAll(ast.fin);
+        break;
+    case 4:                               // empty
+        ast.isNull = true;                // empty
+        ast.ini = new SetClass();
+        ast.ini.add(newBSsymbol(astToBSele(ast,ELEOPEN)));
+        ast.fin = new SetClass();
+        ast.fin.add(newBSsymbol(astToBSele(ast,ELECLOSE)));
+        ast.dig = new SetClass();
+        ast.dig.add(newBSsymbol(astToBSele(ast,ELEOPEN),astToBSele(ast,ELECLOSE)));
+        break;
+    default:
+        ast.ini = new SetClass();
+        ast.fin = new SetClass();
+        ast.dig = new SetClass();
+        for (var a = ast.son; a != null; a = a.bro){
+            computeAstNew(a);
+        }
+    }
+    switch (ast.kind){
+    case 1:                       // alternative
+        trace('e',"computeAst: alt start",ast);
+        ast.isNull = false;
+        ast.ini.add(newBSsymbol(astToBSele(ast,ELEOPEN)));
+        ast.fin.add(newBSsymbol(astToBSele(ast,ELECLOSE)));
+        var ini = new SetClass();
+        var fin = new SetClass();
+        if (ast.son == null) ast.isNull = true;
+        for (var a = ast.son; a != null; a = a.bro){
+            ast.isNull |= a.isNull;
+            ini.addAll(a.ini);
+            fin.addAll(a.fin);
+            ast.dig.addAll(a.dig);
+        }
+        var iniarr = ini.toArray();
+        for (var i = 0; i < iniarr.length; i++){
+            ast.dig.add(newBSsymbol(astToBSele(ast,ELEOPEN),iniarr[i]));   // enter subexpression
+        }
+        var finarr = fin.toArray();
+        for (var i = 0; i < finarr.length; i++){
+            ast.dig.add(newBSsymbol(finarr[i],astToBSele(ast,ELECLOSE)));    // leave subexpression
+        }
+        trace('e',"computeAst: alt end",ast);
+        break;
+    case 2:                       // concatenation
+        trace('e',"computeAst: conc start",ast);
+        ast.isNull = false;
+        ast.ini.add(newBSsymbol(astToBSele(ast,ELEOPEN)));
+        ast.fin.add(newBSsymbol(astToBSele(ast,ELECLOSE)));
+        var prev = null;
+        for (var a = ast.son; a != null; a = a.bro){
+            trace('e',"computeAst: conc ele",a);
+            ast.isNull &= a.isNull;
+            ast.dig.addAll(a.dig);
+            if (a != ast.son){                // not first
+                var iniarr = a.ini.toArray();
+                var finarr = prev.fin.toArray();
+                for (var i = 0; i < finarr.length; i++){
+                    for (var j = 0; j < iniarr.length; j++){
+                        ast.dig.add(newBSsymbol(finarr[i],iniarr[j]));
+                    }
+                }
+            }
+            prev = a;
+        }
+        var iniarr = ast.son.ini.toArray();
+        for (var i = 0; i < iniarr.length; i++){
+            ast.dig.add(newBSsymbol(astToBSele(ast,ELEOPEN),iniarr[i]));   // enter subexpression
+        }
+        var finarr = prev.fin.toArray();
+        for (var i = 0; i < finarr.length; i++){
+            ast.dig.add(newBSsymbol(finarr[i],astToBSele(ast,ELECLOSE)));    // leave subexpression
+        }
+        break;
+    case 3:                               // sub-re
+        trace('e',"computeAst: group start",ast,"body",ast.son);
+        if (ast.groupKind == G_RE1 || ast.groupKind == G_GRO || ast.groupKind == G_BOD){
+            ast.isNull = ast.son.isNull;
+        } else {
+            ast.isNull = true;
+        }
+        ast.ini.add(newBSsymbol(astToBSele(ast,ELEOPEN)));
+        ast.fin.add(newBSsymbol(astToBSele(ast,ELECLOSE)));
+        ast.dig.addAll(ast.son.dig);
+        var iniarr = ast.son.ini.toArray();
+        for (var i = 0; i < iniarr.length; i++){
+            ast.dig.add(newBSsymbol(astToBSele(ast,ELEOPEN),iniarr[i]));   // enter subexpression
+        }
+        var finarr = ast.son.fin.toArray();
+        for (var i = 0; i < finarr.length; i++){
+            ast.dig.add(newBSsymbol(finarr[i],astToBSele(ast,ELECLOSE)));    // leave subexpression
+        }
+
+        if (STRUCTURED){
+            if (ast.groupKind == G_BOD){
+                var iniarr = ast.son.ini.toArray();
+                var finarr = ast.son.fin.toArray();
+                for (var i = 0; i < finarr.length; i++){
+                    for (var j = 0; j < iniarr.length; j++){
+                        ast.dig.add(newBSsymbol(finarr[i],iniarr[j]));
+                    }
+                }
+            }
+        } else {
+            if (ast.groupKind != G_GRO && ast.groupKind != G_OPT){
+                var iniarr = ast.son.ini.toArray();
+                var finarr = ast.son.fin.toArray();
+                for (var i = 0; i < finarr.length; i++){
+                    for (var j = 0; j < iniarr.length; j++){
+                        ast.dig.add(newBSsymbol(finarr[i],iniarr[j]));
+                    }
+                }
+            }
+        }
+        if (ast.groupKind == G_RE0 || ast.groupKind == G_OPT){
+            ast.dig.add(newBSsymbol(astToBSele(ast,ELEOPEN),astToBSele(ast,ELECLOSE))); // ( e )
+        }
+        break;
+    }
+    if (ast.pos.length == 0){           // top node
+        var e = eofAst;
+        var finarr = ast.fin.toArray();
+        for (var i = 0; i < finarr.length; i++){
+            ast.dig.add(newBSsymbol(finarr[i],e.seq));
+        }
+    }
+    trace('e',"computeAst done:",ast);
+}
+
+// compute the n-grams for the tree rooted in the specified ast
+function computeNgrams(ast){
+    trace('n',"computeNgrams",ast);
+    var change = true;
+    var arr = ast.dig.toArray();
+    var added = 0;
+    l: for (var i = 1; i < arr.length; i++){
+        for (var j = 0; j < i; j++){
+            // trace('n',"computeNgrams process:",i+":",arr[i].toNoHtmlString(),"and",
+            //     j+":",arr[j].toNoHtmlString());
+            var last = arr[i].eleAt(-1);
+            var first = arr[j].eleAt(0);
+            var start = arr[i].eleAt(0);
+            var kind = BSeleKind(start);
+            if (isBSeleTerminal(start) || kind == ELEOPEN && BSeleToAst(start).pos.length == 0){  // starts with terminal or (^
+                add: if (last == first && !isBSeleTerminal(last)){     // do not concatenate with terminal
+                    trace('n',"computeNgrams process:",i+":",arr[i].toNoHtmlString(),"and",
+                        j+":",arr[j].toNoHtmlString());
+                    if (!isAllowedSeq(arr[i],arr[j])) break add;     // avoid endless strings ()()...
+                    var ele = newBSsymbol(arr[i].substring(0,-1),arr[j]);
+                    for (var k = 0; k < arr.length; k++){
+                        if (arr[k].equals(ele)) break add;   // no duplicates
+                    }
+                    if (added++ > 100){                     // catch endless loops
+                        twriteln("!!!!!");
+                        error = true;
+                        errorMessage = "B%S too many n-grams";
+                        break l; 
+                    }
+                    arr.push(ele);
+                    trace('n',"computeNgrams add1:",(arr.length-1)+":",ele.toNoHtmlString());
+                }
+            }
+            last = arr[j].eleAt(-1);
+            first = arr[i].eleAt(0);
+            start = arr[j].eleAt(0);
+            kind = BSeleKind(start);
+            if (isBSeleTerminal(start) || kind == ELEOPEN && BSeleToAst(start).pos.length == 0){  // starts with terminal or (^
+                add: if (last == first && !isBSeleTerminal(last)){      // do not concatenate with terminal
+                    trace('n',"computeNgrams process:",j+":",arr[j].toNoHtmlString(),"and",
+                        i+":",arr[i].toNoHtmlString());
+                    if (!isAllowedSeq(arr[j],arr[i])) continue;
+                    var ele = newBSsymbol(arr[j].substring(0,-1),arr[i]);
+                    for (var k = 0; k < arr.length; k++){
+                        if (arr[k].equals(ele)) break add;
+                    }
+                    arr.push(ele);
+                    if (added++ > 100){
+                        twriteln("!!!!!");
+                        error = true;
+                        errorMessage = "B%S too many n-grams";
+                        break l; 
+                    }
+                    trace('n',"computeNgrams add2:",(arr.length-1)+":",ele.toNoHtmlString());
+                }
+            }
+        }
+    }
+    // extract then the ones that start with (^ into Init, and the ones that start with
+    // a terminal into Follow
+    trace('n',"computeNgrams compute ini and foll");
+    InitSet = new SetClass();
+    FollowSet = new SetClass();
+    for (var i = 0; i < arr.length; i++){
+        var el = arr[i];
+        var first = arr[i].eleAt(0);
+        var last = arr[i].eleAt(-1);
+        if (!isBSeleTerminal(last)) continue;    // does not end with terminal
+        var kind = BSeleKind(first);
+        if (kind == ELEOPEN && BSeleToAst(first).pos.length == 0){          // (^
+            if (!purgedTag(InitSet,el)){
+                InitSet.add(el);
+            }
+            trace('n',"computeNgrams add ini",i,el.toNoHtmlString());
+        } else if (isBSeleTerminal(first)){                 // terminal
+            if (!purgedTag(FollowSet,el)){
+                FollowSet.add(el);
+            }
+            trace('n',"computeNgrams add foll",i,el.toNoHtmlString());
+        }
+    }
+}
+
+var InitSet;      // set of items of the initial state
+var FollowSet;    // set of items that follow a terminal
+
+// check that the sequence obtained concatenating the first argument (trimmed by its last
+// element) with the second one is allowed, i.e. it does not contain the concatenation
+// of two bodies of the same *|+ group one of which generates the empty string
+function isAllowedSeq(s1,s2){
+    trace('g',"isAllowedSeq",s1.toNoHtmlString(),s2.toNoHtmlString());
+    var res = true;
+    doit: {
+        // treat this case: (∧(1ε1)1(1ε1 and ε1)1
+
+        // there is a need to detect also the partial groups at the beginning, e.g.:
+        // a1.2.1)1.2.1)1.2)1(1(1.2 and 12: (1.2ε1.2)1.2  here we have two repetitions
+        // of 1, and the first is nonempty and the second is empty
+        
+        var s = newBSsymbol(s1.substring(0,-1),s2);
+        trace('g',"isAllowedSeq",s.toNoHtmlString());
+
+        for (var i = 0; i < s.length(); i++){
+            var ele = s.eleAt(i);
+            var k = BSeleKind(ele);
+            if (k == 0) continue;         // not an open or close
+            var pos = BSeleToPos(ele);
+            for (var j = i+1; j < s.length(); j++){
+                ele = s.eleAt(j);
+                var k1 = BSeleKind(ele);
+                if (k != k1) continue;
+                var pos1 = BSeleToPos(ele);
+                if (arraysIdentical(pos,pos1)){
+                    res = false;
+                    break doit;
+                }
+            }
+        }
+        break doit;
+    } // doit
+    trace('n',"isAllowedSeq",s.toNoHtmlString(),"res",res);
+    return res;
+}
+
+// tell if the element is not to be added because it has been purged
+// N.B. the states reached from the initial one, when purged, have no convergences because
+// the paths in the AST that lead to a same terminal are unique
+function purgedTag(set,el){
+    // el starts with a terminal and ends with a terminal, or starts with (^
+    var res = false;
+    var startpos = BSeleToPos(el.eleAt(0));
+    var lastpos = BSeleToPos(el.eleAt(-1));
+    var tag = el.tag();
+    var arr = set.toArray();
+    for (var i = 0; i < arr.length; i++){
+        var e = arr[i];
+        var startp = BSeleToPos(e.eleAt(0));
+        var lastp = BSeleToPos(e.eleAt(-1));
+        if (!arraysIdentical(startp,startpos)) continue;
+        if (!arraysIdentical(lastp,lastpos)) continue;
+        // choose one of them
+        var t = e.tag();
+        var cmp = 0;
+if (document.getElementById("posixprio").checked){
+        cmp = pat_comp_tags(tag,t);
+} else {
+    compare: {
+        var bp0t1 = pat_bp0(tag,t);
+        var bp0t2 = pat_bp0(t,tag);
+        if (bp0t1 > bp0t2){
+            cmp = 1;
+            break compare;
+        }
+        if (bp0t2 > bp0t1){
+            cmp = -1;
+            break compare;
+        }
+        // bp0t1 == bp0t2
+        cmp = pat_subset_tags(tag,t);
+    }
+}
+
+        if (cmp > 0){                                     // tag of el less prior or equal, tell not to add
+            res = true;
+        } else if (cmp < 0){                              // remove the other
+            set.remove(i);
+            trace('n',"purgedTag removed",e.toNoHtmlString());
+        }
+        break;
+    }
+    trace('n',"purgedTag",posToString(startpos),posToString(lastpos),"res",res);
+    return res;
+}
+
+// deliver a string of as many blanks * 2 as the argument
+function indent(lev){
+    var str = "";
+    for (var i = 0; i < lev; i++){
+        str += "  ";
+    }
+    return str;
+}
+
+// the items of the DFA states
+function BSItem(){
+    this.sym = null;      // the BSsymbol
+    this.left = null;     // the set of iids
+}
+
+// deliver a string representing the specified item
+function bsItemToString(item,nohtml){
+    var st = new StringBuilder();
+    st.append("[");
+    if (nohtml){
+        st.append(item.sym.toNoHtmlString());
+    } else {
+        st.append(item.sym.toString());
+    }
+    var arr = item.left.toArray();
+    for (var j = 0; j < arr.length; j++){
+        st.append(",#");
+        st.append(arr[j]);
+    }
+    st.append("]");
+    return st.toString();
+}
+
+// the transitions
+function GBSTrans(){
+    this.next = null;       // reference to the next transition
+    this.nextState = null;  // the next state (endpoint of this transition)
+    this.sym = 0;           // the terminal
+    this.edge = null;       // reference to the Graph edge that represents it
+}
+
+// the states
+function GBState(){
+    this.suc = null;        // the reference to the next state in the list of states
+    this.number = 0;        // state number
+    this.transList = null;  // the head of the list of transitions
+    this.items = [];        // the items
+    this.isFinal = false;   // whether this state is final
+    this.node = null;       // reference to the Graph node that represents it
+
+    // deliver a string representation of this state
+    this.toString = function(){
+        var st = new StringBuilder();
+        st.append(this.number);
+        if (this.isFinal) st.append(" final");
+        st.append(": ");
+        for (var i = 0; i < this.items.length; i++){
+            if (i > 0) st.append(", ");
+            st.append(bsItemToString(this.items[i]));
+        }
+        for (var t = this.transList; t != null; t = t.next){
+            st.append(" ");
+            st.append(t.sym);
+            st.append("->");
+            st.append(t.nextState.number);
+        }
+        return st.toString();
+    }
+
+    // tell if this state contains the same items as the specified one, or the
+    // same items as contained in the variable items (len indicates the number of
+    // items in it
+    this.equals = function(other,len){
+        if (arguments.length == 1){
+            if (this == other) return true;
+            if (other == null) return false;
+            return this.equals(other.items,other.items.length);
+        }
+        var items = other;
+        if (this.items.length != len){
+            return false;
+        }
+        for (var i = 0; i < len; i++){
+            if (!this.items[i].sym.equals(items[i].sym) ||
+                !this.items[i].left.equals(items[i].left)){
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // trace this state
+    this.trace = function(){
+        twriteln("state:",this.number,this.isFinal ? "final" : "");
+        twriteln("  items:");
+        for (var j = 0; j < this.items.length; j++){
+            twriteln("    ",j+":",bsItemToString(this.items[j],true));
+        }
+        twriteln("  transitions:");
+        for (var t = this.transList; t != null; t = t.next){
+            twriteln("    ",t.sym,"->",t.nextState.number);
+        }
+    }
+
+    // trace this state in Html form
+    this.toHtmlString = function(){
+        var str = "";
+        str += "<dd>state: " + this.number + (this.isFinal ? " final" : "") + "</dd>";
+        str += "<dd style=\"text-indent: 2em;\">items:</dd>";
+        for (var j = 0; j < this.items.length; j++){
+            str += "<dd style=\"text-indent: 4em;\">" + j +
+               ":" + bsItemToString(this.items[j]) + "</dd>";
+        }
+        str += "<dd style=\"text-indent: 2em;\">transitions:</dd>";
+        for (var t = this.transList; t != null; t = t.next){
+            str += "<dd style=\"text-indent: 4em;\">" + t.sym + "&rarr;" +
+                t.nextState.number + "</dd>";
+        }
+        return str;
+    }
+
+    // trace this state in Html form
+    this.traceHtml1 = function(ele){
+        var str = "";
+        str += "<div class=llabel> state: " + this.number + (this.isFinal ? " final" : "");
+        str += "<dd class=llabel1>items:</dd>";
+        for (var j = 0; j < this.items.length; j++){
+            str += "<dd class=llabel2>" + j +
+               ":" + bsItemToString(this.items[j]) + "</dd>";
+        }
+        str += "<dd class=llabel1>transitions:</dd>";
+        for (var t = this.transList; t != null; t = t.next){
+            str += "<dd class=llabel2>" + t.sym + "&rarr;" +
+                t.nextState.number + "</dd>";
+        }
+        str += "</div>";
+        ele.innerHTML = str;
+    }
+}
+
+// create a new state with the specified number, and items
+function newGBState(n,items,len){
+    var s = new GBState();
+    s.number = n;
+    if (items != null){
+        s.items = items.slice(0,len);
+    }
+    return s;
+}
+
+// the state table
+function BStateTable(){
+    this.head = null;       // the head of the list of states
+    this.last = null;       // the tail of the list
+    this.lastAdded = null;  // the last state added
+    this.stateNr = 0;       // the number of states
+    this.table = [];        // the table of states
+
+    // search the state containing the specified items
+    this.search = function(items,len){
+        for (var h = this.head; h != null; h = h.suc){
+            if (h.equals(items,len)) return h;
+        }
+        return null;
+    }
+
+    // add a state with the specified items, if not present
+    this.addUnique = function(items,len){
+        trace('d',"addUnique");
+        var h = this.search(items,len);
+        this.lastAdded = h;
+        if (h != null){                         // found
+            trace('d',"addUnique found");
+            return false;
+        }
+        h = newGBState(this.stateNr++,items,len); // allocate entry
+        if (this.last == null) this.head = h;     // append to list
+        else this.last.suc = h;
+        this.last = h;
+        this.lastAdded = h;
+        trace('d',"addUnique added");
+        return true;
+    }
+
+    // trace this table of states
+    this.trace = function(){
+        for (var s = this.head; s != null; s = s.suc){
+            s.trace();
+        }
+    }
+
+    // trace this table of states in Html form
+    this.traceHtml = function(ele){
+        var str = "";
+        for (var s = this.head; s != null; s = s.suc){
+            str += s.toHtmlString();
+        }
+        ele.innerHTML = str;
+    }
+}
+
+var bsDFA;     // the DFA
+var bsitems;   // items of the state currently built
+var itmNr;     // their number
+
+// add an item with the specified BSsymbol and iids to the current items, if not present
+function addbsItem(sym,left){
+    var itm = 0;
+    var end = itmNr;
+    var off = -1;
+    while ((++off < end) &&          // search duplicates
+        !bsitems[off].sym.equals(sym));
+    if (off < end){                  // already present
+        itm = off;
+        trace('d',"add already present",bsItemToString(bsitems[itm]),"add iid",left);
+        bsitems[itm].left.add(left);
+    } else {
+        bsitems[itmNr] = new BSItem();
+        bsitems[itmNr].sym = sym;
+        bsitems[itmNr].left = new SetClass();
+        bsitems[itmNr].left.add(left);
+        itm = itmNr;
+        itmNr++;
+        trace('d',"added",bsItemToString(bsitems[itm]));
+    }
+    return itm;
+}
+
+// add a new state with the current items
+function addBState(){
+    var res = null;
+    var items = bsitems.slice(0,itmNr);
+    items.sort(function(i1,i2){return i1.sym.compareTo(i2.sym)});
+    if (bsDFA.addUnique(items,itmNr)){
+        for (var i = 0; i < itmNr; i++){
+            var bssym = items[i].sym.eleAt(-1);     // last
+            var sym = BSeleToAst(bssym).sym;
+            if (sym == EOF){
+                bsDFA.lastAdded.isFinal = true;
+                break;
+            }
+        }
+        trace('d',"added state:",bsDFA.lastAdded);
+    } else {
+        trace('d',"found state:",this.bsDFA.lastAdded);
+    }
+    res = bsDFA.lastAdded;
+    return res;
+}
+
+// add a transition from the specifed states with the specified symbol
+function addBSEdge(from,to,sym){
+    var t;
+    sea: {
+        var pr = null;
+        for (t = from.transList; t != null; t = t.next){      // find edge or last
+            if ((t.nextState == to) &&                         // do not insert duplicates
+                (t.sym == sym)){
+                break sea;
+            }
+            pr = t;
+        }
+        t = new GBSTrans();
+        t.nextState = to;
+        t.sym = sym;
+        if (pr == null){                // append
+            from.transList = t;
+        } else {
+            pr.next = t;
+        }
+    }
+    return t;
+}
+
+// build the DFA
+function buildBS(ast){
+    trace('d',"buildBS",ast);
+    alphabet = [];
+    astAlphabet(ast);
+    if (BS_AUGM){
+        computeNgrams(ast);
+    } else {
+        InitSet = ast.ini;
+        FollowSet = ast.dig;
+    }
+    bsDFA = new BStateTable();
+    bsitems = [];
+    itmNr = 0;
+    var arr = InitSet.toArray();
+    for (var i = 0; i < arr.length; i++){
+        addbsItem(arr[i],0);
+    }
+    var digarr = FollowSet.toArray();
+    addBState();
+    if ('d' in trc){
+        trace('d',"buildBS initial state:");
+        bsDFA.trace();
+    }
+    // visit the initial state and the ones generated after it
+    // to create all states
+    var cur = bsDFA.head;                    // build the next ones
+    while (cur != null){
+        trace('d',"processing state:",cur.number,alphabet);
+        // determine the transitions to the next states
+        for (var c = 0; c < alphabet.length; c++){  // for all b in sigma
+            itmNr = 0;
+            for (var i = 0; i < cur.items.length; i++){   // scan its items
+                var itm = cur.items[i];
+                var p = itm.sym.eleAt(-1);          // (())b: take b
+                var sym = BSeleToAst(p).sym;
+                if (sym != alphabet[c]) continue;
+                trace('d',"item",i,bsItemToString(itm),": symbol",c);
+
+                for (var j = 0; j < digarr.length; j++){
+                    var ele = digarr[j];
+                    if (ele.arr[0] != p) continue;
+                    addbsItem(ele.substring(1,ele.length()),i);
+                }
+            }
+            if (itmNr > 0){            // add the new state
+                trace('d',"buildBS adding next state");
+                var next = addBState();
+                trace('d',"buildBS adding edge to it");
+                addBSEdge(cur,next,alphabet[c]);
+                trace('d',"buildBS adding next done");
+            }
+        }
+        cur = cur.suc;
+    }
+    if ('d' in trc){
+        trace('d',"buildBS DFA:",ast.toRE());
+        bsDFA.trace();
+    }
+}
+
+// ---------- Matching  -----------------
+
+// an element in the list of states encountered during matching
+function PathNodeClass(){
+    this.suc = null;       // the (element for the) next state encountered
+    this.next = null;      // the (element for the) previous state encountered
+    this.from = null;      // the from state
+    this.to = null;        // the to state
+    this.sym = 0;          // the terminal
+    this.iid = 0;          // the iid of the selected item
+    this.activeIids = [];  // the active iid of each item of the to state
+    this.iidNodes = [];    // the nodes of the graph of the paths denoting the trees for items of the from state
+    this.elem = null;      // element that shows the progress
+
+    // deliver a string denoting this element
+    this.toString = function(){
+        var str = this.from.number;
+        if (this.to != null) str += "-" + this.sym + "->" + this.to.number;
+        str += " activeIids " + this.activeIids;
+        str += " iid " + this.iid;
+        str += " iidNodes " + this.iidNodes;
+        return str;
+    }
+
+    // trace this element
+    this.trace = function(){
+        twriteln("from",this.from.number,
+            this.to != null ? (this.sym + "->" + this.to.number) : "");
+        for (var i = 0; i < this.from.items.length; i++){
+            twriteln("    ",i+":",
+                this.iidNodes[i] == null ? " " : "*",
+                i == this.iid ? "!" : " ",
+                bsItemToString(this.from.items[i],true),
+                this.next != null ?
+                    (typeof(this.next.activeIids[i]) == "undefined" ? "" : "act#"+this.next.activeIids[i]) : " ",
+                this.iidNodes[i] == null ? "" : this.iidNodes[i]);
+        }
+        if (this.to != null){
+            twriteln("  to",this.to.number);
+            for (var i = 0; i < this.to.items.length; i++){
+                twriteln("    ",i+":",
+                    this.suc != null ?
+                        (this.suc.iidNodes[i] == null ? " " : "*") : " ",
+                    i == this.iid ? "!" : " ",
+                    bsItemToString(this.to.items[i],true),
+                    typeof(this.activeIids[i]) == "undefined" ? "" : "act#"+this.activeIids[i],
+                    this.suc != null ?
+                        (this.suc.iidNodes[i] == null ? "" : this.suc.iidNodes[i]) : "");
+            }
+        }
+    }
+}
+
+// create a new PathNode with the specified data
+function newPathNodeClass(from,to,sym){
+    var node = new PathNodeClass();
+    node.from = from;
+    node.to = to;
+    node.sym = sym;
+    return node;
+}
+
+// match the string containing the text against the RE
+function match(test,text){
+    error = false;
+    trace('m',"match start RE:",ast.toRE(true),"text",text);
+    var head = null;
+    var state = bsDFA.head;
+    cursor = 0;
+    for (var i = 0; i < text.length; i++){
+        if ('m' in trc){
+            trace('m',"match at:",i,"sym",text[i]);
+            state.trace();
+        }
+        var next = null;
+        for (var t = state.transList; t != null; t = t.next){
+            if (t.sym == text[i]){
+                next = t.nextState;
+                break;
+            }
+        }
+        if (next == null){
+            error = true;
+            errorMessage = "match: no next state";
+            cursor = i;
+            break;
+        }
+        var pnode = newPathNodeClass(state,next,text[i]);
+        pnode.next = head;
+        head = pnode;
+        state = next;
+    }
+    pnode = newPathNodeClass(state,null,EOF);
+    pnode.next = head;
+    head = pnode;
+    if (!state.isFinal){
+        error = true;
+        errorMessage = "match: ended in nonfinal state";
+    }
+    if (!test){
+        if (error){                  // error or whole re not consumed
+            var ele = document.getElementById("text");
+            ele.selectionStart = cursor; // show the error
+            ele.selectionEnd = text.length;
+            ele.focus();
+            document.getElementById("error").textContent = "not matched " + errorMessage;
+        } else {
+            document.getElementById("result").textContent = "matched";
+        }
+    }
+    trace('m',"match end RE:",ast.toRE(true),"text",text,error ? "failure" : "success");
+    if ('m' in trc){
+        for (var i = head; i != null; i = i.next){
+            twriteln(i);
+        }
+    }
+    trace('m',"match end");
+    return head;
+}
+
+// the list of states encountered during matching
+var stateList = null;
+
+// show the dfa
+function showdfa(){
+    var el = document.getElementById("thedfa");
+    if (el.style.display == "block"){
+        el.style.display = "none";
+    } else {
+        if (bsDFA != null){
+            el.style.display = "block";
+            showbs();
+            var gr = new Graph();
+            gr.name = "B&S DFA";
+            gr.extras = new GraphExtras();
+            for (var s = bsDFA.head; s != null; s = s.suc){
+                s.node = newNode(gr,s.number,
+                    s.isFinal ? "yellow" : "white",s.toString());
+                s.node.extras.state = s;
+            }
+            for (var s = bsDFA.head; s != null; s = s.suc){
+                for (var t = s.transList; t != null; t = t.next){
+                    t.edge = newEdge(gr,"",t.sym,s.node,t.nextState.node);
+                }
+            }
+            drawGraph(gr);
+        }
+    }
+    matchAnimate();
+}
+
+// show the dfa displaying the First and Follow sets, and then the states
+function showbs(){
+    document.getElementById("bsfirst").innerHTML = bsSetToString(InitSet);
+    var followMap = new MapClass();
+    var foll = FollowSet.toArray();
+    for (var i = 0; i < foll.length; i++){
+        var ele = foll[i];
+        var sym = ele.arr[0];
+        var value = followMap.get(sym);
+        if (value == null){
+            value = new SetClass();
+        }            
+        value.add(ele.substring(1));
+        followMap.set(sym,value);
+    }
+    var elefoll = document.getElementById("bsfollow");
+    elefoll.innerHTML = "<br>";
+    for (var i = 0; i < followMap.size(); i++){
+        var entry = followMap.getEntry(i);
+        elefoll.innerHTML += BSeleToString(entry[0]) + ": " + bsSetToString(entry[1]) + "</br>";
+    }
+    var ele = document.getElementById("dfa");
+    ele.innerHTML = "";
+    bsDFA.traceHtml(ele);
+}
+
+</script>
+<script>
+// ---------- Drawing trees -----------------
+
+// draws the tree of the ast rooted at the specified node
+function drawAst(root){
+    trace('s',"drawAst",root);
+    computeDim(root);
+    if ('s' in trc){
+        traceAst(ast);
+    }
+    var ele = document.getElementById("astTree");
+    var svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"" +
+        " xmlns:xlink=\"http://www.w3.org/1999/xlink\"" +
+        " height=\"" + root.height + "\" width=\"" + root.width + "\">\n";
+    svg += gentree(root);
+    svg += "</svg>\n";
+    trace('s',svg);
+    ele.innerHTML = svg;
+    trace('s',"drawAst done");
+}
+
+// draws the tree of the string rooted at the specified node
+function drawTree(root){
+    trace('s',"drawTree",root);
+    computeDim(root);
+    if ('s' in trc){
+        traceTree();
+    }
+    var svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"" +
+        " xmlns:xlink=\"http://www.w3.org/1999/xlink\"" +
+        " height=\"" + root.height + "\" width=\"" + root.width + "\">\n";
+    svg += gentree(root);
+    svg += "</svg>\n";
+    trace('s',svg);
+    trace('s',"drawTree done");
+    return svg;
+}
+
+var HSPACE = 10;  // horizontal space between sons
+var VSPACE = 20;  // vertical space between node and sons
+
+// determines the dimensions of the specified text
+function computeTextDim(text,node){
+    var ele = document.getElementById("textBox");
+    ele.innerHTML = text;
+    var width = ele.clientWidth + 1;
+    var height = ele.clientHeight + 1;
+    node.iconWidth = width;
+    node.iconHeight = height;
+    trace('s',"computeTextDim",text);
+}
+
+// determines the dimensions of the tree rooted in the specified node
+function computeDim(node){
+    trace('s',"computeDim",node);
+    if (node.son == null){
+        computeTextDim(node.getIcon(),node);
+        node.width = node.iconWidth;
+        node.height = node.iconHeight;
+        return;
+    }
+    var width = 0;
+    var height = 0;
+    for (var i = node.son; i != null; i = i.bro){
+        trace('s',"computeDim loop",i);
+        computeDim(i);
+        if (i != node.son) width += HSPACE;
+        width += i.width;
+        if (i.height > height) height = i.height;
+    }
+    computeTextDim(node.getIcon(),node);
+    height += VSPACE;
+    height += node.iconHeight;
+    if (node.iconWidth > width) width = node.iconWidth;
+    node.width = width;
+    node.height = height;
+}
+
+// draws the tree rooted in the specified node
+function gentree(node){
+    trace('s',"gentree",node);
+    var svg = "";
+    if (node.son == null){
+        var sym = node.getIcon();
+        svg += "<foreignObject x=\"0\" y=\"" + 0 +
+            "\" width=\"" + node.iconWidth + "\" height=\"" + node.iconHeight +
+            "\">" + sym + "</foreignObject>\n";
+    } else {
+        // place the sons
+        var x = 0;
+        var y = node.iconHeight + VSPACE;
+        var x1 = node.width/2;       // start of the lines
+        var y1 = node.iconHeight - 2;
+        var y2 = node.iconHeight + VSPACE;
+        var wson = 0;
+        var n = 0;
+        for (var i = node.son; i != null; i = i.bro){
+            wson += i.width;
+            n++;
+        }
+        // if there is only one son, and it is narrower than the node, it must be centered
+        if (n == 1 && node.son.iconWidth < node.width){
+            x = (node.width - node.son.width) / 2;
+        }
+        var hspace = (node.width - wson)/(n-1);    // space between sons
+        for (var i = node.son; i != null; i = i.bro){
+            svg += "<svg x=\"" + x + "\" y=\"" + y + "\">\n";
+            svg += gentree(i);
+            svg += "</svg>\n";
+            // place the lines
+            var x2 = x + i.width/2;
+            svg += "<line x1=\"" + x1 + "\" y1=\"" + y1 +
+                "\" x2=\"" + x2 + "\" y2=\"" + y2 + "\" style=\"stroke:black;stroke-width:1\" />\n";
+            x += hspace;
+            x += i.width;
+        }
+
+        // place the node
+        svg += "<rect x=\""+ (x1-node.iconWidth/2-2) + "\" y=\"0\" width=\"" + (node.iconWidth+4) +
+            "\" height=\"" + (node.iconHeight+4) + "\"" +
+            " style=\"fill:white;\" />\n";
+        var nodex = node.width/2 - node.iconWidth/2;
+        var icon = node.getIcon();
+        svg += "<foreignObject x=\"" + nodex + "\" y=\"" + 0 +
+            "\" width=\"" + node.iconWidth + "\" height=\"" + node.iconHeight +
+            "\" >" + icon + "</foreignObject>\n";
+    }
+    // svg += "<rect x=\"0\" y=\"0\" width=\"" + node.width +
+    //    "\" height=\"" + node.height + "\"" +
+    //    " style=\"stroke:gray;stroke-width:1;fill-opacity:0\" />\n";
+    trace('s',"gentree",node,svg);
+    return svg;
+}
+
+</script>
+<script>
+// ---------- Main -----------------
+
+var error;                // error flag
+var errorMessage;         // error message
+
+// clear the current web page of the data of a previous parse
+function clearPage(){
+    document.getElementById("error").textContent = "";
+    document.getElementById("result").textContent = "";
+    document.getElementById("annotated").innerHTML = "";
+    document.getElementById("bsfirst").innerHTML = "";
+    document.getElementById("bsfollow").innerHTML = "";
+    document.getElementById("dfa").innerHTML = "";
+    document.getElementById("astTree").innerHTML = "";
+    document.getElementById("dfasvg").innerHTML = "";
+    document.getElementById("dfasvglabels").innerHTML = "";
+    document.getElementById("thedfa").style.display = "none";
+    bsDFA = null;
+    stateList = null;
+}
+
+// parse the re, the string against it, and display its results
+function parse(){
+    trace('c',"parse start");
+    doit: {
+        if (error) break doit;
+        clearPage();
+        trace('c',"parse building ast");
+
+        var ele = document.getElementById("re");
+        re = ele.value;
+        buildAst(false);
+        if (error) break doit;
+
+        trace('c',"parse building ast done");
+        if (document.getElementById("thedfa").style.display == "block"){
+            showbs();
+        }
+
+        trace('c',"parse matching");
+        ele = document.getElementById("text");
+        stateList = match(false,ele.value);
+        trace('c',"parse matching done");
+        if (error){
+            stateList = null;
+            break doit;
+        }
+    } // doit
+    error = false;
+    trace('c',"parse end");
+}
+</script>
+</head>
+<body>
+<h2>Regular Expressions Berry-Sethi</h2>
+
+<table>
+<tr><td>RE:</td><td><input id=re></input></td>
+<td>Syntax: r &rarr; &epsilon; | a | r r | r <code>|</code> r | (r) | [r] | (r)+ | (r)* | r* | r+, a &isin; &Sigma;</td></tr>
+<tr><td>input:</td><td><input id=text></input></td></tr>
+</table>
+
+<p>
+<button onclick="parse()">go</button> <span id=result></span> <mark><span id=error></span></mark>
+
+<p>
+Annotated RE: <span id=annotated></span>
+
+<p>
+AST:
+<p>
+<span id=astTree></span>
+
+<p>
+<button onclick="showdfa()">DFA</button>
+<div id=thedfa style="display:none">
+<p>
+First: <span id=bsfirst></span>
+<p>
+Follow: <span id=bsfollow></span>
+<p>
+DFA:
+<span id=dfa></span>
+<p>
+<span id=playerbuttons></span>
+<span id=animatephase class=blin></span>
+<div id=dfasvg style="border:1px solid lightgray; position:relative"></div>
+<span style="font-size:9pt;">
+To move states: use left mouse button; to move edges, hover them and move the knots.
+</span>
+<span id=dfasvglabels></span>
+<div id=dfaprogress></div>
+</div>
+
+<p>
+<span id=matchdash></span>
+
+<span id="textBox" style="position:absolute;visibility:hidden;height:auto;width:auto;white-space:nowrap;">
+</span>
+<script>
+var browser = navigator.userAgent;
+var mozilla = browser.indexOf("Mozilla");
+if (mozilla < 0){
+    alert("Browser: " + browser.substring(browser) + " not supported"); 
+    error = true;
+} else {
+    error = false;
+    clearPage();
+
+    // to make this web page produce Berry-Sethi DFAs (the traditional ones)
+    // set the following to false
+    BS_AUGM = false;
+}
+</script>
+
+</body>
+</html>
+
